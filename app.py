@@ -10,7 +10,7 @@ CORS(app)
 
 # Path to your compiled doom-ascii binary
 DOOM_PATH = "./doom_ascii" 
-WAD_PATH = "./doom1.wad" # You need to upload a shareware WAD to your repo
+WAD_PATH = "./DOOM1.WAD" # You need to upload a shareware WAD to your repo
 
 # This class manages the actual game process
 class DoomWrapper:
