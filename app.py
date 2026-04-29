@@ -1,20 +1,20 @@
 import subprocess
 import os
 import threading
-import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-# Path to your compiled doom-ascii binary
+# Path to the binary created by 'make'
 DOOM_PATH = "./doom_ascii" 
-WAD_PATH = "./DOOM1.WAD" # You need to upload a shareware WAD to your repo
+WAD_PATH = "./DOOM1.WAD"
 
-# This class manages the actual game process
-class DoomWrapper:
+class DoomGame:
     def __init__(self):
+        self.output = "Initializing Doom..."
+        # Start the game in 'nocolor' mode for best ASCII compatibility
         self.process = subprocess.Popen(
             [DOOM_PATH, "-wad", WAD_PATH, "-nocolor"],
             stdin=subprocess.PIPE,
@@ -23,38 +23,34 @@ class DoomWrapper:
             text=True,
             bufsize=1
         )
-        self.last_frame = "Loading Doom..."
-        # Thread to constantly read the game output
-        threading.Thread(target=self._read_output, daemon=True).start()
+        threading.Thread(target=self._stream_stdout, daemon=True).start()
 
-    def _read_output(self):
+    def _stream_stdout(self):
         while True:
             line = self.process.stdout.readline()
             if line:
-                # We store lines to build the frame
-                # In a real terminal, we'd look for ANSI clear codes
-                self.last_frame = line 
+                self.output = line
 
-    def send_cmd(self, char):
+    def send_key(self, key):
         if self.process.poll() is None:
-            self.process.stdin.write(char + "\n")
+            self.process.stdin.write(f"{key}\n")
             self.process.stdin.flush()
 
-doom = DoomWrapper()
+# Initialize the game instance
+game = DoomGame()
 
 @app.route('/move', methods=['POST'])
 def move():
     data = request.get_json(silent=True) or request.form
-    cmd = data.get('input', '').lower()
+    user_input = data.get('input', '').lower()
     
-    # Map EarSketch inputs to Doom keys
-    key_map = {'w': 'w', 's': 's', 'a': 'a', 'd': 'd', 'f': ' '}
-    if cmd in key_map:
-        doom.send_cmd(key_map[cmd])
+    # Map keys: EarSketch W/A/S/D to Doom keys
+    if user_input:
+        game.send_key(user_input)
     
     return jsonify({
-        "ascii_map": doom.last_frame,
-        "event": "step" if cmd != 'f' else "fire"
+        "ascii_map": game.output,
+        "event": "step"
     })
 
 if __name__ == '__main__':
