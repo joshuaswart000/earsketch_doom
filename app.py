@@ -12,6 +12,10 @@ game_map = [
 
 player_pos = [1, 1]
 
+@app.route('/')
+def home():
+    return "Doom Engine is Awake!"
+
 @app.route('/move', methods=['POST'])
 def move():
     global player_pos
