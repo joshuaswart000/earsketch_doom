@@ -16,7 +16,7 @@ if os.path.exists('src'):
     print("Files in src/ folder:", os.listdir('src'))
 # ---------------------------------------------------------
 
-DOOM_PATH = "./game/doom-ascii" 
+DOOM_PATH = "./doom-ascii" 
 WAD_PATH = "./DOOM1.WAD"
 
 class DoomGame:
