@@ -3,6 +3,7 @@ import os
 import threading
 import pty
 import base64
+import time
 from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
 
@@ -19,21 +20,26 @@ class DoomGame:
             return
 
         try:
+            # We use a PTY for the game's output, but we keep a handle on stdin
             self.master_fd, slave_fd = pty.openpty()
-            # Force terminal size in environment
             self.process = subprocess.Popen(
                 [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
-                stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, close_fds=True,
-                env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"}
+                stdin=subprocess.PIPE, # Direct pipe for more reliable input
+                stdout=slave_fd,
+                stderr=slave_fd,
+                close_fds=True,
+                env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"},
+                bufsize=0
             )
             
             def kickstart():
-                import time
                 time.sleep(5)
-                # Send 'y' then 'Enter' to clear the license screen
-                os.write(self.master_fd, b"y\n")
-                time.sleep(1)
-                os.write(self.master_fd, b"\n")
+                # Send 'y' and multiple Enters directly to stdin
+                try:
+                    self.process.stdin.write(b"y\n\n\n")
+                    self.process.stdin.flush()
+                except:
+                    pass
             
             threading.Thread(target=kickstart, daemon=True).start()
             threading.Thread(target=self._stream_output, daemon=True).start()
@@ -52,9 +58,9 @@ class DoomGame:
     def send_key(self, key):
         try:
             if self.process.poll() is None:
-                # Map 'f' to Space for EarSketch compatibility
                 if key == 'f': key = ' '
-                os.write(self.master_fd, key.encode())
+                self.process.stdin.write(key.encode())
+                self.process.stdin.flush()
         except:
             pass
 
@@ -71,7 +77,10 @@ def index():
             </head>
             <body style="background:#000; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0;">
                 <div id="terminal" style="width:640px; height:400px; border:2px solid #00FF00;"></div>
-                <div style="color:#0F0; margin-top:10px; font-family:monospace;">WASD: Move | SPACE: Fire | Y: Accept License</div>
+                <div style="color:#0F0; margin-top:10px; font-family:monospace; text-align:center;">
+                    WASD: Move | SPACE: Fire<br>
+                    If stuck, type 'y' in EarSketch to start
+                </div>
                 <script>
                     const term = new Terminal({cols: 80, rows: 25, theme: {background:'#000', foreground:'#0F0'}, convertEol:true});
                     term.open(document.getElementById('terminal'));
@@ -89,7 +98,7 @@ def index():
                             term.write(bytes);
                         }
                     }
-                    setInterval(update, 150);
+                    setInterval(update, 200);
 
                     window.addEventListener('keydown', e => {
                         const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','f':'f','y':'y','Enter':'f'};
@@ -109,8 +118,9 @@ def index():
 
 @app.route('/map')
 def get_map():
-    # Helper for EarSketch to get clean text without Base64 issues
-    raw_text = base64.b64decode(game.output_b64).decode('utf-8', errors='ignore')
+    raw_text = ""
+    if game.output_b64:
+        raw_text = base64.b64decode(game.output_b64).decode('utf-8', errors='ignore')
     return jsonify({
         "ascii_map": game.output_b64,
         "plain_text": raw_text
