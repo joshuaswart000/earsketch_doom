@@ -1,142 +1,94 @@
 import subprocess
 import os
-import threading
 import pty
-import base64
-import time
-from flask import Flask, request, jsonify, render_template_string
-from flask_cors import CORS
+import threading
+from flask import Flask, render_template_string
+from flask_socketio import SocketIO
 
 app = Flask(__name__)
-CORS(app)
+# WebSockets allow the server to "push" frames the moment they are ready
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 DOOM_PATH = "./doom-ascii"
 WAD_PATH = "./DOOM1.WAD"
 
-class DoomGame:
+class DoomTerminal:
     def __init__(self):
-        self.output_b64 = ""
-        if not os.path.exists(DOOM_PATH): return
+        self.master_fd, slave_fd = pty.openpty()
+        self.process = subprocess.Popen(
+            [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
+            stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+            env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"}
+        )
+        threading.Thread(target=self._read_output, daemon=True).start()
 
-        try:
-            self.master_fd, slave_fd = pty.openpty()
-            # -directinput helps the engine listen to raw bytes better
-            self.process = subprocess.Popen(
-                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
-                stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-                env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"}
-            )
-            
-            # This handles the "y" and "Enter" sequence automatically after 10 seconds
-            def kickstart():
-                time.sleep(10)
-                os.write(self.master_fd, b"y\r\n\r\n\r\n")
-            
-            threading.Thread(target=kickstart, daemon=True).start()
-            threading.Thread(target=self._stream_output, daemon=True).start()
-        except Exception as e:
-            print(f"Init Error: {e}")
-
-    def _stream_output(self):
+    def _read_output(self):
         while True:
             try:
-                data = os.read(self.master_fd, 10240)
+                # Read a large chunk (a full frame is ~2000 bytes)
+                data = os.read(self.master_fd, 4096)
                 if data:
-                    # Store the latest "frame" as base64
-                    self.output_b64 = base64.b64encode(data).decode('utf-8')
+                    # Emit immediately to the frontend
+                    socketio.emit('output', {'data': data.decode('utf-8', 'ignore')})
             except: break
 
-    def send_key(self, key):
-        try:
-            if self.process.poll() is None:
-                # Map 'f' to Enter
-                if key == 'f': key = '\r\n'
-                os.write(self.master_fd, key.encode())
-        except: pass
+    def write(self, data):
+        if data == '\r' or data == '\n':
+            os.write(self.master_fd, b'\r\n')
+        else:
+            os.write(self.master_fd, data.encode())
 
-game = DoomGame()
+doom = DoomTerminal()
 
 @app.route('/')
 def index():
     return render_template_string('''
         <html>
             <head>
-                <title>Doom Terminal</title>
+                <title>Doom Real-Time Terminal</title>
+                <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
                 <style>
-                    body { 
-                        background: #000; 
-                        color: #0F0;
-                        display: flex; 
-                        flex-direction: column; 
-                        align-items: center; 
-                        margin: 0; 
-                    }
+                    body { background: #000; color: #0F0; display: flex; flex-direction: column; align-items: center; margin: 0; }
                     #display { 
                         font-family: 'Courier New', monospace; 
-                        font-size: 14px; 
-                        line-height: 14px; 
-                        letter-spacing: 0px;
-                        border: 2px solid #0F0; 
-                        padding: 10px;
-                        white-space: pre;
-                        display: inline-block;
-                        /* This prevents the "too wide" look by forcing a container */
-                        width: 80ch; 
-                        overflow: hidden;
+                        font-size: 14px; line-height: 14px; 
+                        white-space: pre; border: 2px solid #0F0; padding: 10px;
+                        width: 80ch; height: 25lh; overflow: hidden;
                     }
                 </style>
             </head>
             <body>
-                <h1 style="margin: 10px;">Doom Terminal</h1>
-                <pre id="display">Initializing Doom Engine...</pre>
+                <h1>Doom Live Stream</h1>
+                <pre id="display">Connecting to engine...</pre>
                 <script>
-                    let lastFrame = "";
-                    async function update() {
-                        try {
-                            const res = await fetch('/map');
-                            const data = await res.json();
-                            
-                            if (data.plain_text && data.plain_text !== lastFrame) {
-                                // A full 80x25 frame is 2000 chars. 
-                                // Checking for > 1500 ensures we have almost a whole screen.
-                                if (data.plain_text.length > 1500) {
-                                    document.getElementById('display').innerText = data.plain_text;
-                                    lastFrame = data.plain_text;
-                                }
-                            }
-                        } catch (e) {}
-                    }
-                    // Refresh slightly slower (250ms) to allow the buffer to fill
-                    setInterval(update, 250);
-                    
+                    const socket = io();
+                    const display = document.getElementById('display');
+                    let buffer = "";
+
+                    socket.on('output', (msg) => {
+                        // We append data to a buffer and only draw when we see a "frame reset" 
+                        // or enough data has accumulated to be a full screen.
+                        buffer += msg.data;
+                        if (buffer.length > 1800) {
+                            display.innerText = buffer.slice(-2000); 
+                            buffer = ""; // Clear buffer after draw to keep it snappy
+                        }
+                    });
+
                     window.addEventListener('keydown', e => {
-                        const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','y':'y','Enter':'f'};
+                        const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','Enter':'\r'};
                         const val = keys[e.key] || keys[e.key.toLowerCase()];
-                        if(val) fetch('/move', {
-                            method:'POST', 
-                            body:JSON.stringify({input:val}), 
-                            headers:{'Content-Type':'application/json'}
-                        });
+                        if(val) socket.emit('input', {data: val});
                     });
                 </script>
             </body>
         </html>
     ''')
 
-@app.route('/map')
-def get_map():
-    raw_text = ""
-    if game.output_b64:
-        raw_text = base64.b64decode(game.output_b64).decode('utf-8', errors='ignore')
-    return jsonify({"ascii_map": game.output_b64, "plain_text": raw_text})
-
-@app.route('/move', methods=['POST'])
-def move():
-    data = request.get_json() or {}
-    game.send_key(data.get('input', ''))
-    return jsonify({"status": "sent"})
+@socketio.on('input')
+def handle_input(json):
+    doom.write(json['data'])
 
 if __name__ == '__main__':
-    # Using run_simple to avoid the safety crashes on Render
-    from werkzeug.serving import run_simple
-    run_simple('0.0.0.0', 10000, app, use_reloader=False, use_debugger=False, threaded=True)
+    # Using socketio.run instead of app.run for WebSocket support
+    socketio.run(app, host='0.0.0.0', port=10000, allow_unsafe_werkzeug=True)
