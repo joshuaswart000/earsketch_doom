@@ -16,7 +16,7 @@ class DoomTerminal:
     def __init__(self):
         self.master_fd, slave_fd = pty.openpty()
         self.process = subprocess.Popen(
-            [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
+            [DOOM_PATH, "-iwad", WAD_PATH, "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
             stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
             env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"}
         )
