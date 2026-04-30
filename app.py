@@ -66,38 +66,48 @@ def index():
                 <div style="margin-bottom:10px;">Network Status: <span id="socket-status">Connecting...</span></div>
                 <div id="terminal-container"></div>
                 <script>
-                    // Force the socket to use 'websocket' transport only (best for Render)
                     const socket = io({transports: ['websocket', 'polling']});
                     const statusText = document.getElementById('socket-status');
                     
                     const term = new Terminal({
-                        cols: 80, rows: 25,
-                        cursorBlink: true,
+                        cols: 80, 
+                        rows: 25,
+                        cursorBlink: false, // Blink off for a cleaner "video" feel
                         convertEol: true,
                         theme: { background: '#000000' }
                     });
                     term.open(document.getElementById('terminal-container'));
-
+                
+                    let frameBuffer = "";
+                
                     socket.on('connect', () => {
                         statusText.innerText = "ONLINE";
                         statusText.style.color = "#0f0";
-                        term.write('Connection Established. Tap "y" then Enter to start game.\\r\\n');
                     });
-
-                    socket.on('connect_error', (err) => {
-                        statusText.innerText = "Error: " + err.message;
-                    });
-
+                
                     socket.on('output', (msg) => {
-                        // Use escape sequence to reset cursor to top-left for big frames
-                        if (msg.data.length > 1000) {
-                            term.write('\\x1b[H' + msg.data);
-                        } else {
-                            term.write(msg.data);
+                        frameBuffer += msg.data;
+                
+                        // If we have a full frame (2000 chars), draw it all at once
+                        if (frameBuffer.length >= 2000) {
+                            // \x1b[H resets cursor to top-left to overwrite the frame
+                            term.write('\x1b[H' + frameBuffer.slice(0, 2000));
+                            frameBuffer = frameBuffer.slice(2000); 
                         }
                     });
-
-                    term.onData(data => { socket.emit('input', {data: data}); });
+                
+                    // Fallback: If the engine stops sending data (like at a prompt),
+                    // print whatever is left in the buffer so the user isn't stuck.
+                    setInterval(() => {
+                        if (frameBuffer.length > 0 && frameBuffer.length < 2000) {
+                            term.write(frameBuffer);
+                            frameBuffer = "";
+                        }
+                    }, 100);
+                
+                    term.onData(data => { 
+                        socket.emit('input', {data: data}); 
+                    });
                 </script>
             </body>
         </html>
