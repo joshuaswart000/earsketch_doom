@@ -31,8 +31,11 @@ class DoomGame:
             )
             
             def kickstart():
-                time.sleep(10) # Wait for engine to breathe
-                os.write(self.master_fd, b"y\n\n")
+                # Wait for the engine to reach the license screen
+                time.sleep(8)
+                # Send 'y' followed by multiple 'Enter' keys (\r\n)
+                # This clears the license and the main menu
+                os.write(self.master_fd, b"y\r\n\r\n\r\n")
             
             threading.Thread(target=kickstart, daemon=True).start()
             # FIX: Ensure this method exists below!
