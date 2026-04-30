@@ -62,35 +62,28 @@ def index():
                 <title>Doom Color Terminal</title>
                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
                 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
                 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
                 <style>
                     body { 
-                        background: #1a1a1a; 
-                        margin: 0; 
-                        display: flex; 
-                        flex-direction: column; 
-                        justify-content: center; 
-                        align-items: center; 
-                        height: 100vh; 
-                        color: white; 
-                        font-family: sans-serif;
+                        background: #111; margin: 0; 
+                        display: flex; flex-direction: column; 
+                        justify-content: center; align-items: center; 
+                        height: 100vh; color: #aaa; font-family: monospace;
                     }
                     #terminal-container { 
-                        width: 720px; 
-                        height: 450px; 
-                        border: 5px solid #333; 
-                        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+                        width: 800px; /* Fixed width for 80 columns */
+                        height: 480px; /* Fixed height for 25 lines */
+                        background: black;
+                        border: 10px solid #333;
+                        padding: 5px;
+                        overflow: hidden; /* Prevents the 'off-screen' scroll */
                     }
-                    .status { margin-bottom: 10px; font-size: 14px; color: #888; }
                 </style>
             </head>
             <body>
-                <div class="status">Status: <span id="socket-status">Connecting...</span></div>
+                <div style="margin-bottom:10px;">Status: <span id="socket-status">Connecting...</span></div>
                 <div id="terminal-container"></div>
-                <div style="margin-top: 10px; font-size: 12px; color: #666;">
-                    Click terminal and press <b>'y'</b> then <b>'Enter'</b> to start.
-                </div>
-
                 <script>
                     const socket = io();
                     const statusText = document.getElementById('socket-status');
@@ -99,27 +92,24 @@ def index():
                         cols: 80,
                         rows: 25,
                         cursorBlink: true,
-                        theme: { background: '#000000' },
-                        convertEol: true // Crucial for proper line breaks in raw PTY
+                        convertEol: true,
+                        theme: { background: '#000000' }
                     });
+
+                    // Initialize the Fit Addon
+                    const fitAddon = new TerminalAddonFit.FitAddon();
+                    term.loadAddon(fitAddon);
                     
                     term.open(document.getElementById('terminal-container'));
+                    fitAddon.fit(); // Force it to fill the container
 
                     socket.on('connect', () => {
                         statusText.innerText = "Connected";
                         statusText.style.color = "#0f0";
-                        term.write('--- Socket Connected ---\\r\\n');
                     });
 
-                    socket.on('disconnect', () => {
-                        statusText.innerText = "Disconnected";
-                        statusText.style.color = "#f00";
-                    });
-
-                    // This is where the frame logic happens
                     socket.on('output', (msg) => {
-                        // If we see a large amount of data, it's likely a frame.
-                        // We reset cursor to top-left to "overwrite" rather than scroll.
+                        // Use \x1b[H to reset cursor to top-left for big frames
                         if (msg.data.length > 1000) {
                             term.write('\\x1b[H' + msg.data);
                         } else {
@@ -127,7 +117,6 @@ def index():
                         }
                     });
 
-                    // Send keyboard data directly
                     term.onData(data => {
                         socket.emit('input', {data: data});
                     });
