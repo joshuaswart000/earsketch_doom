@@ -16,15 +16,14 @@ WAD_PATH = "./DOOM1.WAD"
 class DoomGame:
     def __init__(self):
         self.output_b64 = ""
-        if not os.path.exists(DOOM_PATH): return
+        if not os.path.exists(DOOM_PATH):
+            return
 
         try:
-            # We use ONE pty for everything to avoid the tcgetattr error
             self.master_fd, slave_fd = pty.openpty()
-            
             self.process = subprocess.Popen(
                 [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
-                stdin=slave_fd, # Use the slave_fd for BOTH
+                stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
                 close_fds=True,
@@ -32,24 +31,32 @@ class DoomGame:
             )
             
             def kickstart():
-                import time
-                time.sleep(5)
-                # Now we write to master_fd, which the pty translates for the engine
+                time.sleep(10) # Wait for engine to breathe
                 os.write(self.master_fd, b"y\n\n")
             
             threading.Thread(target=kickstart, daemon=True).start()
+            # FIX: Ensure this method exists below!
             threading.Thread(target=self._stream_output, daemon=True).start()
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Init Error: {e}")
+
+    def _stream_output(self):
+        while True:
+            try:
+                # Read from the terminal master
+                data = os.read(self.master_fd, 10240)
+                if data:
+                    self.output_b64 = base64.b64encode(data).decode('utf-8')
+            except:
+                break
 
     def send_key(self, key):
         try:
             if self.process.poll() is None:
                 if key == 'f': key = ' '
-                # Send to the master_fd
                 os.write(self.master_fd, key.encode())
-        except:
-            pass
+        except Exception as e:
+            print(f"Input Error: {e}")
 
 game = DoomGame()
 
@@ -65,7 +72,7 @@ def index():
             <body style="background:#000; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0;">
                 <div id="terminal" style="width:640px; height:400px; border:2px solid #00FF00;"></div>
                 <div style="color:#0F0; margin-top:10px; font-family:monospace; text-align:center;">
-                    WASD: Move | SPACE: Fire<br>
+                    WASD: Move | SPACE: Fire | Y: License<br>
                     Status: <span id="status">Connecting...</span>
                 </div>
                 <script>
@@ -91,7 +98,7 @@ def index():
                     setInterval(update, 200);
 
                     window.addEventListener('keydown', e => {
-                        const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','f':'f','y':'y','Enter':'\n'};
+                        const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','f':'f','y':'y','Enter':'\\n'};
                         const val = keys[e.key] || keys[e.key.toLowerCase()];
                         if(val) {
                             fetch('/move', {
@@ -111,10 +118,7 @@ def get_map():
     raw_text = ""
     if game.output_b64:
         raw_text = base64.b64decode(game.output_b64).decode('utf-8', errors='ignore')
-    return jsonify({
-        "ascii_map": game.output_b64,
-        "plain_text": raw_text
-    })
+    return jsonify({"ascii_map": game.output_b64, "plain_text": raw_text})
 
 @app.route('/move', methods=['POST'])
 def move():
