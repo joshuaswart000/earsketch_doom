@@ -77,62 +77,57 @@ def index():
     return render_template_string('''
         <html>
             <head>
-                <title>EarSketch Doom Playable Stream</title>
+                <title>EarSketch Doom Terminal</title>
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+                <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
                 <style>
-                    body { background: black; color: #00FF00; font-family: 'Courier New', monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
-                    /* Added line-height and letter-spacing to make it look like a grid */
-                    pre { 
-                        border: 2px solid #333; 
-                        padding: 10px; 
-                        background: #050505; 
-                        line-height: 1; 
-                        letter-spacing: 0px;
-                        font-size: 12px; 
-                        white-space: pre; /* Changed from pre-wrap to pre */
-                        width: 800px; 
-                        height: 600px; 
-                        overflow: hidden;
-                    }
-                    .controls { color: #555; margin-top: 10px; font-size: 14px; }
+                    body { background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                    #terminal { width: 800px; height: 600px; border: 5px solid #333; }
+                    .controls { color: #00FF00; margin-top: 15px; font-family: monospace; }
                 </style>
+            </head>
+            <body>
+                <div id="terminal"></div>
+                <div class="controls">WASD: Move | SPACE: Fire | Browser focused to play</div>
+
                 <script>
+                    const term = new Terminal({
+                        cols: 80,
+                        rows: 50,
+                        theme: { background: '#000000', foreground: '#00FF00' },
+                        cursorBlink: false,
+                        convertEol: true
+                    });
+                    term.open(document.getElementById('terminal'));
+
                     async function sendInput(key) {
-                        try {
-                            await fetch('/move', {
-                                method: 'POST',
-                                body: JSON.stringify({input: key}),
-                                headers: {'Content-Type': 'application/json'}
-                            });
-                        } catch (e) {}
+                        fetch('/move', {
+                            method: 'POST',
+                            body: JSON.stringify({input: key}),
+                            headers: {'Content-Type': 'application/json'}
+                        });
                     }
 
                     window.addEventListener('keydown', (e) => {
-                        const keyMap = {'w': 'w', 's': 's', 'a': 'a', 'd': 'd', ' ': 'f', 'Enter': 'f', 'f': 'f'};
+                        const keyMap = {'w':'w','a':'a','s':'s','d':'d',' ':'f','f':'f','Enter':'f'};
                         const cmd = keyMap[e.key.toLowerCase()];
                         if (cmd) { sendInput(cmd); e.preventDefault(); }
                     });
 
                     async function updateScreen() {
-                        try {
-                            const res = await fetch('/move', { 
-                                method: 'POST', 
-                                body: JSON.stringify({input: ''}), 
-                                headers: {'Content-Type': 'application/json'} 
-                            });
-                            const data = await res.json();
-                            if (data.ascii_map) {
-                                // Clean up the ANSI position codes so the browser handles it as a block
-                                const cleanMap = data.ascii_map.replace(/\\x1b\\[[0-9;]*[a-zA-Z]/g, '');
-                                document.getElementById('screen').innerText = cleanMap;
-                            }
-                        } catch (e) {}
+                        const res = await fetch('/move', { 
+                            method: 'POST', 
+                            body: JSON.stringify({input: ''}), 
+                            headers: {'Content-Type': 'application/json'} 
+                        });
+                        const data = await res.json();
+                        if (data.ascii_map) {
+                            // Write raw data (including ANSI codes) to the terminal
+                            term.write(data.ascii_map);
+                        }
                     }
-                    setInterval(updateScreen, 100); 
+                    setInterval(updateScreen, 100);
                 </script>
-            </head>
-            <body>
-                <pre id="screen">Connecting to Engine...</pre>
-                <div class="controls">WASD to Move | Space/F to Fire</div>
             </body>
         </html>
     ''')
