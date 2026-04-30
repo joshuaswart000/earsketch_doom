@@ -6,7 +6,6 @@ from flask import Flask, render_template_string
 from flask_socketio import SocketIO
 
 app = Flask(__name__)
-# WebSockets allow the server to "push" frames the moment they are ready
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 DOOM_PATH = "./doom-ascii"
@@ -16,27 +15,32 @@ class DoomTerminal:
     def __init__(self):
         self.master_fd, slave_fd = pty.openpty()
         self.process = subprocess.Popen(
-            [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
+            # REMOVED -nocolor HERE
+            [DOOM_PATH, "-iwad", WAD_PATH, "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
             stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-            env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"}
+            env={
+                "TERM": "xterm-256color", 
+                "COLUMNS": "80", 
+                "LINES": "25",
+                "PYTHONUNBUFFERED": "1"
+            }
         )
         threading.Thread(target=self._read_output, daemon=True).start()
 
     def _read_output(self):
         while True:
             try:
-                # Read a large chunk (a full frame is ~2000 bytes)
-                data = os.read(self.master_fd, 4096)
+                # High-speed read for smooth color transitions
+                data = os.read(self.master_fd, 10240)
                 if data:
-                    # Emit immediately to the frontend
+                    # Send raw bytes to the frontend for xterm.js to decode
                     socketio.emit('output', {'data': data.decode('utf-8', 'ignore')})
             except: break
 
     def write(self, data):
-        if data == '\r' or data == '\n':
-            os.write(self.master_fd, b'\r\n')
-        else:
+        try:
             os.write(self.master_fd, data.encode())
+        except: pass
 
 doom = DoomTerminal()
 
@@ -45,41 +49,39 @@ def index():
     return render_template_string('''
         <html>
             <head>
-                <title>Doom Real-Time Terminal</title>
+                <title>Doom Color Terminal</title>
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+                <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
                 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
                 <style>
-                    body { background: #000; color: #0F0; display: flex; flex-direction: column; align-items: center; margin: 0; }
-                    #display { 
-                        font-family: 'Courier New', monospace; 
-                        font-size: 14px; line-height: 14px; 
-                        white-space: pre; border: 2px solid #0F0; padding: 10px;
-                        width: 80ch; height: 25lh; overflow: hidden;
-                    }
+                    body { background: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+                    #terminal { width: 800px; height: 500px; border: 2px solid #444; }
                 </style>
             </head>
             <body>
-                <h1>Doom Live Stream</h1>
-                <pre id="display">Connecting to engine...</pre>
+                <div id="terminal"></div>
                 <script>
+                    const term = new Terminal({
+                        cursorBlink: true,
+                        cols: 80,
+                        rows: 25,
+                        theme: { background: '#000000' }
+                    });
+                    term.open(document.getElementById('terminal'));
+                    
                     const socket = io();
-                    const display = document.getElementById('display');
-                    let buffer = "";
 
+                    // Receive output and pipe directly to the terminal
                     socket.on('output', (msg) => {
-                        // We append data to a buffer and only draw when we see a "frame reset" 
-                        // or enough data has accumulated to be a full screen.
-                        buffer += msg.data;
-                        if (buffer.length > 1800) {
-                            display.innerText = buffer.slice(-2000); 
-                            buffer = ""; // Clear buffer after draw to keep it snappy
-                        }
+                        term.write(msg.data);
                     });
 
-                    window.addEventListener('keydown', e => {
-                        const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','Enter':'\r'};
-                        const val = keys[e.key] || keys[e.key.toLowerCase()];
-                        if(val) socket.emit('input', {data: val});
+                    // Send keyboard input directly to the engine
+                    term.onData(data => {
+                        socket.emit('input', {data: data});
                     });
+
+                    socket.on('connect', () => term.write('\\r\\nConnected to Doom Engine...\\r\\n'));
                 </script>
             </body>
         </html>
@@ -90,5 +92,4 @@ def handle_input(json):
     doom.write(json['data'])
 
 if __name__ == '__main__':
-    # Using socketio.run instead of app.run for WebSocket support
     socketio.run(app, host='0.0.0.0', port=10000, allow_unsafe_werkzeug=True)
