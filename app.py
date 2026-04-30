@@ -94,5 +94,6 @@ def move():
     return jsonify({"status": "sent"})
 
 if __name__ == '__main__':
-    # The fix that keeps it running on Render
-    app.run(host='0.0.0.0', port=10000, allow_unsafe_werkzeug=True)
+    # Use this method to bypass the safety check without the TypeError
+    from werkzeug.serving import run_simple
+    run_simple('0.0.0.0', 10000, app, use_reloader=False, use_debugger=False, threaded=True)
