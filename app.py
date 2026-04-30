@@ -7,7 +7,6 @@ from flask import Flask, render_template_string
 from flask_socketio import SocketIO
 
 app = Flask(__name__)
-# Added async_mode='threading' to ensure Render doesn't block the WebSocket handshake
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 DOOM_PATH = "./doom-ascii"
@@ -19,12 +18,7 @@ class DoomTerminal:
         self.process = subprocess.Popen(
             [DOOM_PATH, "-iwad", WAD_PATH, "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
             stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-            env={
-                "TERM": "xterm-256color", 
-                "COLUMNS": "80", 
-                "LINES": "25",
-                "PYTHONUNBUFFERED": "1"
-            }
+            env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25", "PYTHONUNBUFFERED": "1"}
         )
         threading.Thread(target=self._read_output, daemon=True).start()
 
@@ -39,7 +33,6 @@ class DoomTerminal:
 
     def write(self, data):
         try:
-            # Map Enter key to the correct carriage return
             val = b"\r" if data == "\n" else data.encode()
             os.write(self.master_fd, val)
         except:
@@ -59,7 +52,7 @@ def index():
                 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
                 <style>
                     body { background: #111; margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; color: #eee; font-family: monospace; }
-                    #terminal-container { width: 800px; height: 480px; background: black; border: 5px solid #444; }
+                    #terminal-container { width: 800px; height: 480px; background: black; border: 5px solid #444; overflow: hidden; }
                 </style>
             </head>
             <body>
@@ -68,46 +61,42 @@ def index():
                 <script>
                     const socket = io({transports: ['websocket', 'polling']});
                     const statusText = document.getElementById('socket-status');
-                    
                     const term = new Terminal({
-                        cols: 80, 
-                        rows: 25,
-                        cursorBlink: false, // Blink off for a cleaner "video" feel
+                        cols: 80, rows: 25,
+                        cursorBlink: false,
                         convertEol: true,
                         theme: { background: '#000000' }
                     });
                     term.open(document.getElementById('terminal-container'));
-                
+
                     let frameBuffer = "";
-                
+
                     socket.on('connect', () => {
                         statusText.innerText = "ONLINE";
                         statusText.style.color = "#0f0";
                     });
-                
+
                     socket.on('output', (msg) => {
                         frameBuffer += msg.data;
-                
-                        // If we have a full frame (2000 chars), draw it all at once
-                        if (frameBuffer.length >= 2000) {
-                            // \x1b[H resets cursor to top-left to overwrite the frame
-                            term.write('\x1b[H' + frameBuffer.slice(0, 2000));
-                            frameBuffer = frameBuffer.slice(2000); 
+                        
+                        // Wait for a significant chunk of data (approx 1 full frame)
+                        if (frameBuffer.length >= 1800) {
+                            // FIXED: Removed space in \x1b[H
+                            // This sequence sends the cursor to Row 1, Col 1 instantly.
+                            term.write('\\x1b[H' + frameBuffer);
+                            frameBuffer = ""; 
                         }
                     });
-                
-                    // Fallback: If the engine stops sending data (like at a prompt),
-                    // print whatever is left in the buffer so the user isn't stuck.
+
+                    // Flush any remaining text every 50ms so menus stay responsive
                     setInterval(() => {
-                        if (frameBuffer.length > 0 && frameBuffer.length < 2000) {
+                        if (frameBuffer.length > 0) {
                             term.write(frameBuffer);
                             frameBuffer = "";
                         }
-                    }, 100);
-                
-                    term.onData(data => { 
-                        socket.emit('input', {data: data}); 
-                    });
+                    }, 50);
+
+                    term.onData(data => { socket.emit('input', {data: data}); });
                 </script>
             </body>
         </html>
