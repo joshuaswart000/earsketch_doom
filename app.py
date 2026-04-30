@@ -66,4 +66,4 @@ def handle_input(json):
     doom.write(json['data'])
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=10000)
+    socketio.run(app, host='0.0.0.0', port=10000, allow_unsafe_werkzeug=True)
