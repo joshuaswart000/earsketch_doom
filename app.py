@@ -68,16 +68,39 @@ game = DoomGame()
 
 @app.route('/')
 def index():
-    # This creates the visual stream at https://earsketch-doom.onrender.com/
     return render_template_string('''
         <html>
             <head>
-                <title>EarSketch Doom Stream</title>
+                <title>EarSketch Doom Playable Stream</title>
                 <style>
-                    body { background: black; color: #00FF00; font-family: monospace; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
-                    pre { border: 2px solid #333; padding: 20px; background: #050505; line-height: 1.1; font-size: 10px; white-space: pre-wrap; word-wrap: break-word; width: 90vw; height: 90vh; }
+                    body { background: black; color: #00FF00; font-family: monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
+                    pre { border: 2px solid #333; padding: 20px; background: #050505; line-height: 1.1; font-size: 10px; white-space: pre-wrap; word-wrap: break-word; width: 90vw; height: 80vh; }
+                    .controls { color: #555; margin-top: 10px; font-size: 14px; }
                 </style>
                 <script>
+                    async function sendInput(key) {
+                        try {
+                            await fetch('/move', {
+                                method: 'POST',
+                                body: JSON.stringify({input: key}),
+                                headers: {'Content-Type': 'application/json'}
+                            });
+                        } catch (e) {}
+                    }
+
+                    // Listen for physical keyboard presses
+                    window.addEventListener('keydown', (e) => {
+                        const keyMap = {
+                            'w': 'w', 's': 's', 'a': 'a', 'd': 'd', 
+                            ' ': 'f', 'Enter': 'f', 'f': 'f'
+                        };
+                        const cmd = keyMap[e.key.toLowerCase()] || keyMap[e.key];
+                        if (cmd) {
+                            sendInput(cmd);
+                            e.preventDefault(); // Stop page from scrolling
+                        }
+                    });
+
                     async function updateScreen() {
                         try {
                             const res = await fetch('/move', { 
@@ -96,6 +119,7 @@ def index():
             </head>
             <body>
                 <pre id="screen">Connecting to Engine...</pre>
+                <div class="controls">WASD to Move | Space/F to Interact/Fire</div>
             </body>
         </html>
     ''')
