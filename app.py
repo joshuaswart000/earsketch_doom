@@ -21,7 +21,7 @@ class DoomGame:
         try:
             self.master_fd, slave_fd = pty.openpty()
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
+                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-interactive"],
                 stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, close_fds=True
             )
             
@@ -78,12 +78,10 @@ def index():
                         if (data.ascii_map) {
                             const raw = atob(data.ascii_map);
                             
-                            // CHECK FOR THE HOME/CLEAR COMMAND
-                            // \x1b[H is the standard "Move to 0,0" command for Doom
-                            if (raw.includes('\x1b[H') || raw.includes('\x1b[2J')) {
-                                term.clear(); // Wipe the screen
-                                term.reset(); // Reset the scrollback
-                            }
+                            // FORCE A WIPE: Clear the terminal every time we get a fresh data chunk
+                            // This stops the "trailing logs" and ensures only the game is visible.
+                            term.reset(); 
+                            term.write('\x1b[2J\x1b[H'); // ANSI codes for "Clear Screen" and "Go to Home"
 
                             const bytes = new Uint8Array(raw.length);
                             for(let i=0; i<raw.length; i++) bytes[i] = raw.charCodeAt(i);
