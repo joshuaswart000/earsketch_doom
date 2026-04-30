@@ -15,38 +15,36 @@ WAD_PATH = "./DOOM1.WAD"
 class DoomGame:
     def __init__(self):
         self.output = "Initializing Doom..."
-        
         if not os.path.exists(DOOM_PATH):
             self.output = f"ERROR: {DOOM_PATH} not found."
             return
 
         try:
-            # Create a pseudo-terminal to trick Doom into thinking a screen is attached
             self.master_fd, slave_fd = pty.openpty()
-            
-            # Start Doom using the slave end of the PTY
+            # Adding -nodraw and -nosound to ensure it doesn't hang on drivers
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i"],
+                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw"],
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
                 text=True,
                 close_fds=True
             )
-            
-            # Start background thread to read the terminal output
             threading.Thread(target=self._stream_output, daemon=True).start()
         except Exception as e:
             self.output = f"Process start failed: {str(e)}"
 
     def _stream_output(self):
+        buffer = ""
         while True:
             try:
-                # Read from the master side of the PTY
                 data = os.read(self.master_fd, 4096).decode('utf-8', errors='ignore')
                 if data:
-                    # Clean up ANSI escape codes and take the latest screen state
-                    self.output = data
+                    buffer += data
+                    # Only keep the last 2000 characters to prevent memory bloat
+                    if len(buffer) > 2000:
+                        buffer = buffer[-2000:]
+                    self.output = buffer
             except:
                 break
 
