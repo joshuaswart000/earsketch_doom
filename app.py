@@ -16,55 +16,40 @@ WAD_PATH = "./DOOM1.WAD"
 class DoomGame:
     def __init__(self):
         self.output_b64 = ""
-        if not os.path.exists(DOOM_PATH):
-            return
+        if not os.path.exists(DOOM_PATH): return
 
         try:
-            # PTY is ONLY for capturing the screen (stdout)
+            # We use ONE pty for everything to avoid the tcgetattr error
             self.master_fd, slave_fd = pty.openpty()
+            
             self.process = subprocess.Popen(
                 [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
-                stdin=subprocess.PIPE, # DIRECT PIPE for input
+                stdin=slave_fd, # Use the slave_fd for BOTH
                 stdout=slave_fd,
                 stderr=slave_fd,
                 close_fds=True,
-                env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"},
-                bufsize=0
+                env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"}
             )
             
-            # This thread clears the license screen automatically
             def kickstart():
+                import time
                 time.sleep(5)
-                self.send_key('y')
-                time.sleep(1)
-                self.send_key('\n')
-                time.sleep(1)
-                self.send_key('\n')
+                # Now we write to master_fd, which the pty translates for the engine
+                os.write(self.master_fd, b"y\n\n")
             
             threading.Thread(target=kickstart, daemon=True).start()
             threading.Thread(target=self._stream_output, daemon=True).start()
         except Exception as e:
             print(f"Error: {e}")
 
-    def _stream_output(self):
-        while True:
-            try:
-                data = os.read(self.master_fd, 10240)
-                if data:
-                    self.output_b64 = base64.b64encode(data).decode('utf-8')
-            except:
-                break
-
     def send_key(self, key):
         try:
             if self.process.poll() is None:
-                # Standardize inputs
                 if key == 'f': key = ' '
-                # Write to the PIPE, not the PTY
-                self.process.stdin.write(key.encode())
-                self.process.stdin.flush()
-        except Exception as e:
-            print(f"Input Error: {e}")
+                # Send to the master_fd
+                os.write(self.master_fd, key.encode())
+        except:
+            pass
 
 game = DoomGame()
 
