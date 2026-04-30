@@ -26,7 +26,7 @@ class DoomGame:
             
             # Start Doom using the slave end of the PTY
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-wad", WAD_PATH, "-nocolor", "-i", "-reg"],
+                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i"],
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
