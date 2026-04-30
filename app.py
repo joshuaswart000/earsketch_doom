@@ -79,8 +79,20 @@ def index():
             <head>
                 <title>EarSketch Doom Playable Stream</title>
                 <style>
-                    body { background: black; color: #00FF00; font-family: monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
-                    pre { border: 2px solid #333; padding: 20px; background: #050505; line-height: 1.1; font-size: 10px; white-space: pre-wrap; word-wrap: break-word; width: 90vw; height: 80vh; }
+                    body { background: black; color: #00FF00; font-family: 'Courier New', monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
+                    /* Added line-height and letter-spacing to make it look like a grid */
+                    pre { 
+                        border: 2px solid #333; 
+                        padding: 10px; 
+                        background: #050505; 
+                        line-height: 1; 
+                        letter-spacing: 0px;
+                        font-size: 12px; 
+                        white-space: pre; /* Changed from pre-wrap to pre */
+                        width: 800px; 
+                        height: 600px; 
+                        overflow: hidden;
+                    }
                     .controls { color: #555; margin-top: 10px; font-size: 14px; }
                 </style>
                 <script>
@@ -94,17 +106,10 @@ def index():
                         } catch (e) {}
                     }
 
-                    // Listen for physical keyboard presses
                     window.addEventListener('keydown', (e) => {
-                        const keyMap = {
-                            'w': 'w', 's': 's', 'a': 'a', 'd': 'd', 
-                            ' ': 'f', 'Enter': 'f', 'f': 'f'
-                        };
-                        const cmd = keyMap[e.key.toLowerCase()] || keyMap[e.key];
-                        if (cmd) {
-                            sendInput(cmd);
-                            e.preventDefault(); // Stop page from scrolling
-                        }
+                        const keyMap = {'w': 'w', 's': 's', 'a': 'a', 'd': 'd', ' ': 'f', 'Enter': 'f', 'f': 'f'};
+                        const cmd = keyMap[e.key.toLowerCase()];
+                        if (cmd) { sendInput(cmd); e.preventDefault(); }
                     });
 
                     async function updateScreen() {
@@ -116,16 +121,18 @@ def index():
                             });
                             const data = await res.json();
                             if (data.ascii_map) {
-                                document.getElementById('screen').innerText = data.ascii_map;
+                                // Clean up the ANSI position codes so the browser handles it as a block
+                                const cleanMap = data.ascii_map.replace(/\\x1b\\[[0-9;]*[a-zA-Z]/g, '');
+                                document.getElementById('screen').innerText = cleanMap;
                             }
                         } catch (e) {}
                     }
-                    setInterval(updateScreen, 150); 
+                    setInterval(updateScreen, 100); 
                 </script>
             </head>
             <body>
                 <pre id="screen">Connecting to Engine...</pre>
-                <div class="controls">WASD to Move | Space/F to Interact/Fire</div>
+                <div class="controls">WASD to Move | Space/F to Fire</div>
             </body>
         </html>
     ''')
