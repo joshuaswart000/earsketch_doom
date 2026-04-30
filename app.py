@@ -70,6 +70,7 @@ def index():
                     term.open(document.getElementById('terminal-container'));
 
                     let frameBuffer = "";
+                    let lastDataTime = Date.now();
 
                     socket.on('connect', () => {
                         statusText.innerText = "ONLINE";
@@ -78,23 +79,24 @@ def index():
 
                     socket.on('output', (msg) => {
                         frameBuffer += msg.data;
+                        lastDataTime = Date.now();
                         
-                        // Wait for a significant chunk of data (approx 1 full frame)
-                        if (frameBuffer.length >= 1800) {
-                            // FIXED: Removed space in \x1b[H
-                            // This sequence sends the cursor to Row 1, Col 1 instantly.
-                            term.write('\\x1b[H' + frameBuffer);
-                            frameBuffer = ""; 
+                        // If we have a full frame (roughly 2000 chars), draw it all at once
+                        if (frameBuffer.length >= 2000) {
+                            term.write('\\x1b[H' + frameBuffer.substring(0, 2000));
+                            frameBuffer = frameBuffer.substring(2000); 
                         }
                     });
 
-                    // Flush any remaining text every 50ms so menus stay responsive
+                    // Fallback: Only print if data has been sitting for 200ms 
+                    // This prevents the "fragmented" look during active gameplay
                     setInterval(() => {
-                        if (frameBuffer.length > 0) {
+                        const timeSinceLastData = Date.now() - lastDataTime;
+                        if (frameBuffer.length > 0 && timeSinceLastData > 200) {
                             term.write(frameBuffer);
                             frameBuffer = "";
                         }
-                    }, 50);
+                    }, 100);
 
                     term.onData(data => { socket.emit('input', {data: data}); });
                 </script>
