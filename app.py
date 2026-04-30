@@ -21,8 +21,9 @@ class DoomGame:
         try:
             self.master_fd, slave_fd = pty.openpty()
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-interactive"],
-                stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, close_fds=True
+                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
+                stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, close_fds=True,
+                env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"}
             )
             
             def kickstart():
@@ -76,15 +77,17 @@ def index():
                         const res = await fetch('/move', {method:'POST', body:JSON.stringify({input:''}), headers:{'Content-Type':'application/json'}});
                         const data = await res.json();
                         if (data.ascii_map) {
-                            const raw = atob(data.ascii_map);
-                            
-                            // FORCE A WIPE: Clear the terminal every time we get a fresh data chunk
-                            // This stops the "trailing logs" and ensures only the game is visible.
-                            term.reset(); 
-                            term.write('\x1b[2J\x1b[H'); // ANSI codes for "Clear Screen" and "Go to Home"
+                            // 1. Fully wipe the terminal's internal state
+                            term.clear();
+                            term.reset();
+                            // 2. Move cursor to 0,0 manually just in case
+                            term.write('\x1b[H'); 
 
+                            const raw = atob(data.ascii_map);
                             const bytes = new Uint8Array(raw.length);
                             for(let i=0; i<raw.length; i++) bytes[i] = raw.charCodeAt(i);
+                            
+                            // 3. Write the new frame
                             term.write(bytes);
                         }
                     }
