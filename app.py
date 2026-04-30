@@ -43,14 +43,17 @@ class DoomGame:
     def _stream_output(self):
         while True:
             try:
-                # Read absolutely everything available
+                # Read the latest chunk from the engine
                 data = os.read(self.master_fd, 10240).decode('utf-8', errors='ignore')
                 if data:
-                    # Remove the specific character that might be clearing the screen 
-                    # and just set the output to the raw text
-                    clean_data = data.replace('\x0c', '')
-                    if clean_data.strip():
-                        self.output = clean_data
+                    # Doom uses '\x1b[H' to move the cursor to the top-left (home).
+                    # We split by the "Home" command and take only the newest frame.
+                    frames = data.split('\x1b[H')
+                    if len(frames) > 1:
+                        # Prepend the Home command back so xterm knows where to draw
+                        self.output = '\x1b[H' + frames[-1]
+                    else:
+                        self.output = data
             except:
                 break
 
@@ -122,7 +125,7 @@ def index():
                         });
                         const data = await res.json();
                         if (data.ascii_map) {
-                            // Write raw data (including ANSI codes) to the terminal
+                            // term.clear() or just writing the \x1b[H frame will fix the repetition
                             term.write(data.ascii_map);
                         }
                     }
