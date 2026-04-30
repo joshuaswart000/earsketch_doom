@@ -22,7 +22,7 @@ class DoomGame:
             self.master_fd, slave_fd = pty.openpty()
             # -directinput helps the engine listen to raw bytes better
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-iwad", WAD_PATH, '''"-nocolor", "-i",''' "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
+                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
                 stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
                 env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25"}
             )
@@ -65,7 +65,7 @@ def index():
                 <style>
                     body { 
                         background: #000; 
-                        /*color: #0F0; */
+                        color: #0F0;
                         display: flex; 
                         flex-direction: column; 
                         align-items: center; 
