@@ -22,7 +22,7 @@ class DoomGame:
         # Added stderr capture to see why it might be hanging
         try:
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-wad", WAD_PATH, "-nocolor"],
+                [DOOM_PATH, "-wad", WAD_PATH, "-nocolor", "-i"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
