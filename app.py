@@ -21,7 +21,6 @@ class DoomGame:
 
         try:
             self.master_fd, slave_fd = pty.openpty()
-            # Adding -nodraw and -nosound to ensure it doesn't hang on drivers
             self.process = subprocess.Popen(
                 [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
                 stdin=slave_fd,
@@ -30,6 +29,13 @@ class DoomGame:
                 text=True,
                 close_fds=True
             )
+            
+            # --- ADD THIS STARTUP KICK ---
+            import time
+            time.sleep(2) # Wait for engine to load
+            os.write(self.master_fd, b"\n") # Send an Enter key to wake up the screen
+            # -----------------------------
+
             threading.Thread(target=self._stream_output, daemon=True).start()
         except Exception as e:
             self.output = f"Process start failed: {str(e)}"
