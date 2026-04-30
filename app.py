@@ -20,11 +20,11 @@ class DoomGame:
             return
 
         try:
-            # We use a PTY for the game's output, but we keep a handle on stdin
+            # PTY is ONLY for capturing the screen (stdout)
             self.master_fd, slave_fd = pty.openpty()
             self.process = subprocess.Popen(
                 [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
-                stdin=subprocess.PIPE, # Direct pipe for more reliable input
+                stdin=subprocess.PIPE, # DIRECT PIPE for input
                 stdout=slave_fd,
                 stderr=slave_fd,
                 close_fds=True,
@@ -32,14 +32,14 @@ class DoomGame:
                 bufsize=0
             )
             
+            # This thread clears the license screen automatically
             def kickstart():
                 time.sleep(5)
-                # Send 'y' and multiple Enters directly to stdin
-                try:
-                    self.process.stdin.write(b"y\n\n\n")
-                    self.process.stdin.flush()
-                except:
-                    pass
+                self.send_key('y')
+                time.sleep(1)
+                self.send_key('\n')
+                time.sleep(1)
+                self.send_key('\n')
             
             threading.Thread(target=kickstart, daemon=True).start()
             threading.Thread(target=self._stream_output, daemon=True).start()
@@ -58,11 +58,13 @@ class DoomGame:
     def send_key(self, key):
         try:
             if self.process.poll() is None:
+                # Standardize inputs
                 if key == 'f': key = ' '
+                # Write to the PIPE, not the PTY
                 self.process.stdin.write(key.encode())
                 self.process.stdin.flush()
-        except:
-            pass
+        except Exception as e:
+            print(f"Input Error: {e}")
 
 game = DoomGame()
 
@@ -79,30 +81,33 @@ def index():
                 <div id="terminal" style="width:640px; height:400px; border:2px solid #00FF00;"></div>
                 <div style="color:#0F0; margin-top:10px; font-family:monospace; text-align:center;">
                     WASD: Move | SPACE: Fire<br>
-                    If stuck, type 'y' in EarSketch to start
+                    Status: <span id="status">Connecting...</span>
                 </div>
                 <script>
                     const term = new Terminal({cols: 80, rows: 25, theme: {background:'#000', foreground:'#0F0'}, convertEol:true});
                     term.open(document.getElementById('terminal'));
 
                     async function update() {
-                        const res = await fetch('/map');
-                        const data = await res.json();
-                        if (data.ascii_map) {
-                            term.clear();
-                            term.reset();
-                            term.write('\\x1b[H');
-                            const raw = atob(data.ascii_map);
-                            const bytes = new Uint8Array(raw.length);
-                            for(let i=0; i<raw.length; i++) bytes[i] = raw.charCodeAt(i);
-                            term.write(bytes);
-                        }
+                        try {
+                            const res = await fetch('/map');
+                            const data = await res.json();
+                            if (data.ascii_map) {
+                                term.clear();
+                                term.reset();
+                                term.write('\\x1b[H');
+                                const raw = atob(data.ascii_map);
+                                const bytes = new Uint8Array(raw.length);
+                                for(let i=0; i<raw.length; i++) bytes[i] = raw.charCodeAt(i);
+                                term.write(bytes);
+                                document.getElementById('status').innerText = "Live";
+                            }
+                        } catch(e) {}
                     }
                     setInterval(update, 200);
 
                     window.addEventListener('keydown', e => {
-                        const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','f':'f','y':'y','Enter':'f'};
-                        const val = keys[e.key.toLowerCase()];
+                        const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','f':'f','y':'y','Enter':'\n'};
+                        const val = keys[e.key] || keys[e.key.toLowerCase()];
                         if(val) {
                             fetch('/move', {
                                 method:'POST', 
