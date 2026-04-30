@@ -62,7 +62,7 @@ def index():
                 <div id="terminal"></div>
                 <script>
                     const term = new Terminal({
-                        cursorBlink: true,
+                        cursorBlink: false, // Blink off for cleaner frame swaps
                         cols: 80,
                         rows: 25,
                         theme: { background: '#000000' }
@@ -70,18 +70,28 @@ def index():
                     term.open(document.getElementById('terminal'));
                     
                     const socket = io();
-
-                    // Receive output and pipe directly to the terminal
+                    let frameBuffer = ""; // Our storage for the incoming frame
+                
                     socket.on('output', (msg) => {
-                        term.write(msg.data);
+                        frameBuffer += msg.data;
+                
+                        // A full Doom frame (80x25) is exactly 2,000 characters.
+                        // Once we hit that limit, we clear the screen and draw the whole block.
+                        if (frameBuffer.length >= 2000) {
+                            // \x1b[H moves the cursor to the top-left (Home)
+                            // This is faster than term.clear()
+                            term.write('\x1b[H' + frameBuffer.slice(0, 2000));
+                            
+                            // Keep any leftover data for the next frame
+                            frameBuffer = frameBuffer.slice(2000);
+                        }
                     });
-
-                    // Send keyboard input directly to the engine
+                
                     term.onData(data => {
                         socket.emit('input', {data: data});
                     });
-
-                    socket.on('connect', () => term.write('\\r\\nConnected to Doom Engine...\\r\\n'));
+                
+                    socket.on('connect', () => term.write('\r\nConnected. Press any key to start...\r\n'));
                 </script>
             </body>
         </html>
