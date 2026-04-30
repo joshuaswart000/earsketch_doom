@@ -62,7 +62,7 @@ def index():
                 <div id="terminal"></div>
                 <script>
                     const term = new Terminal({
-                        cursorBlink: false, // Blink off for cleaner frame swaps
+                        cursorBlink: false,
                         cols: 80,
                         rows: 25,
                         theme: { background: '#000000' }
@@ -70,28 +70,32 @@ def index():
                     term.open(document.getElementById('terminal'));
                     
                     const socket = io();
-                    let frameBuffer = ""; // Our storage for the incoming frame
+                    let frameBuffer = "";
                 
                     socket.on('output', (msg) => {
                         frameBuffer += msg.data;
                 
-                        // A full Doom frame (80x25) is exactly 2,000 characters.
-                        // Once we hit that limit, we clear the screen and draw the whole block.
-                        if (frameBuffer.length >= 2000) {
-                            // \x1b[H moves the cursor to the top-left (Home)
-                            // This is faster than term.clear()
-                            term.write('\x1b[H' + frameBuffer.slice(0, 2000));
-                            
-                            // Keep any leftover data for the next frame
-                            frameBuffer = frameBuffer.slice(2000);
+                        // If we see a "Clear Screen" sequence or hit the character limit, flush it!
+                        if (frameBuffer.includes('\x1b[2J') || frameBuffer.length >= 2000) {
+                            // Use \x1b[H to reset cursor to top-left and overwrite
+                            term.write('\x1b[H' + frameBuffer);
+                            frameBuffer = ""; 
                         }
                     });
+                
+                    // Fallback: If no data comes for 100ms, just print whatever we have
+                    setInterval(() => {
+                        if (frameBuffer.length > 0) {
+                            term.write('\x1b[H' + frameBuffer);
+                            frameBuffer = "";
+                        }
+                    }, 100);
                 
                     term.onData(data => {
                         socket.emit('input', {data: data});
                     });
                 
-                    socket.on('connect', () => term.write('\r\nConnected. Press any key to start...\r\n'));
+                    socket.on('connect', () => term.write('\r\nConnected to Doom Engine...\r\n'));
                 </script>
             </body>
         </html>
