@@ -21,7 +21,7 @@ class DoomGame:
         try:
             self.master_fd, slave_fd = pty.openpty()
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-warp", "1", "1", "-width", "80", "-height", "25"],
+                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
                 stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, close_fds=True
             )
             
@@ -76,8 +76,15 @@ def index():
                         const res = await fetch('/move', {method:'POST', body:JSON.stringify({input:''}), headers:{'Content-Type':'application/json'}});
                         const data = await res.json();
                         if (data.ascii_map) {
-                            // Decode the Base64 and write raw bytes to xterm
                             const raw = atob(data.ascii_map);
+                            
+                            // CHECK FOR THE HOME/CLEAR COMMAND
+                            // \x1b[H is the standard "Move to 0,0" command for Doom
+                            if (raw.includes('\x1b[H') || raw.includes('\x1b[2J')) {
+                                term.clear(); // Wipe the screen
+                                term.reset(); // Reset the scrollback
+                            }
+
                             const bytes = new Uint8Array(raw.length);
                             for(let i=0; i<raw.length; i++) bytes[i] = raw.charCodeAt(i);
                             term.write(bytes);
