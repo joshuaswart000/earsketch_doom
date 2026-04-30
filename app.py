@@ -8,21 +8,21 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Paths verified from your Render build logs
 DOOM_PATH = "./doom-ascii"
 WAD_PATH = "./DOOM1.WAD"
 
 class DoomGame:
     def __init__(self):
-        self.output = "Initializing Doom..."
+        self.output = ""
         if not os.path.exists(DOOM_PATH):
-            self.output = f"ERROR: {DOOM_PATH} not found."
+            self.output = "ERROR: doom-ascii not found."
             return
 
         try:
             self.master_fd, slave_fd = pty.openpty()
+            # Added -width and -height to force the engine to stay in bounds
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
+                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-width", "80", "-height", "25"],
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
@@ -30,49 +30,39 @@ class DoomGame:
                 close_fds=True
             )
             
-            # --- ADD THIS STARTUP KICK ---
-            import time
-            time.sleep(2) # Wait for engine to load
-            os.write(self.master_fd, b"\n") # Send an Enter key to wake up the screen
-            # -----------------------------
-
+            # Send a "kickstart" Enter key after a short delay
+            def kickstart():
+                import time
+                time.sleep(3)
+                os.write(self.master_fd, b"\n")
+            
+            threading.Thread(target=kickstart, daemon=True).start()
             threading.Thread(target=self._stream_output, daemon=True).start()
         except Exception as e:
-            self.output = f"Process start failed: {str(e)}"
+            self.output = f"Init Failed: {str(e)}"
 
     def _stream_output(self):
         while True:
             try:
-                # Read the latest chunk from the engine
                 data = os.read(self.master_fd, 10240).decode('utf-8', errors='ignore')
                 if data:
-                    # Doom uses '\x1b[H' to move the cursor to the top-left (home).
-                    # We split by the "Home" command and take only the newest frame.
-                    frames = data.split('\x1b[H')
-                    if len(frames) > 1:
-                        # Prepend the Home command back so xterm knows where to draw
-                        self.output = '\x1b[H' + frames[-1]
-                    else:
+                    # We look for the 'Home' ANSI code. If found, we treat it as a new frame.
+                    if '\x1b[H' in data:
                         self.output = data
+                    else:
+                        # Append small updates, but cap the length to avoid overflow
+                        self.output = (self.output + data)[-10240:]
             except:
                 break
 
     def send_key(self, key):
         try:
             if self.process and self.process.poll() is None:
-                # Map 'f' to ' ' (Space) because Doom uses Space/Enter to skip intros
-                if key == 'f':
-                    key = ' '
-                
-                # Write the key AND a newline, then force it through
+                if key == 'f': key = ' '
                 os.write(self.master_fd, key.encode())
-                # Small delay to let the engine process the "press"
-                import time
-                time.sleep(0.1)
-        except Exception as e:
-            print(f"Input Error: {e}")
+        except:
+            pass
 
-# Initialize the game instance
 game = DoomGame()
 
 @app.route('/')
@@ -85,30 +75,19 @@ def index():
                 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
                 <style>
                     body { background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-                    #terminal { width: 800px; height: 600px; border: 5px solid #333; }
+                    #terminal { width: 640px; height: 400px; border: 2px solid #00FF00; }
                     .controls { color: #00FF00; margin-top: 15px; font-family: monospace; }
                 </style>
             </head>
             <body>
                 <div id="terminal"></div>
                 <div class="controls">WASD: Move | SPACE: Fire | Browser focused to play</div>
-
                 <script>
-                    const term = new Terminal({
-                        cols: 80,
-                        rows: 50,
-                        theme: { background: '#000000', foreground: '#00FF00' },
-                        cursorBlink: false,
-                        convertEol: true
-                    });
+                    const term = new Terminal({ cols: 80, rows: 25, theme: { background: '#000000', foreground: '#00FF00' }, convertEol: true });
                     term.open(document.getElementById('terminal'));
 
                     async function sendInput(key) {
-                        fetch('/move', {
-                            method: 'POST',
-                            body: JSON.stringify({input: key}),
-                            headers: {'Content-Type': 'application/json'}
-                        });
+                        fetch('/move', { method: 'POST', body: JSON.stringify({input: key}), headers: {'Content-Type': 'application/json'} });
                     }
 
                     window.addEventListener('keydown', (e) => {
@@ -118,14 +97,13 @@ def index():
                     });
 
                     async function updateScreen() {
-                        const res = await fetch('/move', { 
-                            method: 'POST', 
-                            body: JSON.stringify({input: ''}), 
-                            headers: {'Content-Type': 'application/json'} 
-                        });
+                        const res = await fetch('/move', { method: 'POST', body: JSON.stringify({input: ''}), headers: {'Content-Type': 'application/json'} });
                         const data = await res.json();
                         if (data.ascii_map) {
-                            // term.clear() or just writing the \x1b[H frame will fix the repetition
+                            // If the data contains the "Home" code, clear the terminal for a fresh draw
+                            if (data.ascii_map.includes('\\x1b[H') || data.ascii_map.includes('\\033[H')) {
+                                term.reset();
+                            }
                             term.write(data.ascii_map);
                         }
                     }
@@ -137,14 +115,11 @@ def index():
 
 @app.route('/move', methods=['POST'])
 def move():
-    data = request.get_json(silent=True) or request.form
+    data = request.get_json(silent=True) or {}
     user_input = data.get('input', '').lower()
-    
     if user_input:
         game.send_key(user_input)
-    
     return jsonify({"ascii_map": game.output, "event": "step"})
 
 if __name__ == '__main__':
-    # Render uses port 10000 by default
     app.run(host='0.0.0.0', port=10000)
