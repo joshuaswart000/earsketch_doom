@@ -23,7 +23,7 @@ class DoomGame:
             self.master_fd, slave_fd = pty.openpty()
             # Adding -nodraw and -nosound to ensure it doesn't hang on drivers
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw"],
+                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1"],
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
@@ -56,7 +56,7 @@ class DoomGame:
                     key = ' '
                 
                 # Write the key AND a newline, then force it through
-                os.write(self.master_fd, f"{key}\n".encode())
+                os.write(self.master_fd, key.encode())
                 # Small delay to let the engine process the "press"
                 import time
                 time.sleep(0.1)
