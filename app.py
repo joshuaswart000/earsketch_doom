@@ -53,10 +53,17 @@ class DoomGame:
     def send_key(self, key):
         try:
             if self.process and self.process.poll() is None:
-                # Write the keypress directly to the terminal
+                # Map 'f' to ' ' (Space) because Doom uses Space/Enter to skip intros
+                if key == 'f':
+                    key = ' '
+                
+                # Write the key AND a newline, then force it through
                 os.write(self.master_fd, f"{key}\n".encode())
-        except:
-            pass
+                # Small delay to let the engine process the "press"
+                import time
+                time.sleep(0.1)
+        except Exception as e:
+            print(f"Input Error: {e}")
 
 # Initialize the game instance
 game = DoomGame()
