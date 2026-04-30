@@ -53,14 +53,11 @@ class DoomGame:
     def send_key(self, key):
         try:
             if self.process.poll() is None:
-                # Map 'f' to Space for EarSketch, and 'Enter' to \n
-                if key == 'f': key = ' '
-                if key == 'Enter': key = '\n'
+                # Map 'f' or 'Enter' to a real carriage return
+                if key in ['f', 'Enter', '\n']:
+                    key = '\r' # Use carriage return for terminal prompts
                 
-                # We use os.write, but let's make sure we send a newline 
-                # if the engine is stuck in a prompt
                 os.write(self.master_fd, key.encode())
-                # No flush needed for os.write on a pty, but let's be sure
         except Exception as e:
             print(f"Input Error: {e}")
 
