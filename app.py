@@ -20,9 +20,10 @@ class DoomGame:
 
         try:
             self.master_fd, slave_fd = pty.openpty()
-            # Added -width and -height to force the engine to stay in bounds
+            # 1. REMOVED -nodraw (this was likely blocking the 3D view)
+            # 2. Added -interactive to force it to accept our PTY inputs
             self.process = subprocess.Popen(
-                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-width", "80", "-height", "25"],
+                [DOOM_PATH, "-iwad", WAD_PATH, "-nocolor", "-i", "-nosound", "-warp", "1", "1", "-width", "80", "-height", "25"],
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
@@ -30,11 +31,12 @@ class DoomGame:
                 close_fds=True
             )
             
-            # Send a "kickstart" Enter key after a short delay
+            # Use a more aggressive startup kick
             def kickstart():
                 import time
-                time.sleep(3)
-                os.write(self.master_fd, b"\n")
+                for _ in range(5): # Try 5 times to wake it up
+                    time.sleep(2)
+                    os.write(self.master_fd, b" \n") # Space + Enter
             
             threading.Thread(target=kickstart, daemon=True).start()
             threading.Thread(target=self._stream_output, daemon=True).start()
