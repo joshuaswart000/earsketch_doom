@@ -104,9 +104,17 @@ def index():
 
 @app.route('/move', methods=['POST'])
 def move():
-    user_input = (request.get_json() or {}).get('input', '')
-    if user_input: game.send_key(user_input)
-    return jsonify({"ascii_map": game.output_b64})
+    data = request.get_json() or {}
+    user_input = data.get('input', '')
+    if user_input:
+        game.send_key(user_input)
+    
+    # Send BOTH formats: Base64 for the web terminal, and Plain Text for EarSketch
+    raw_text = base64.b64decode(game.output_b64).decode('utf-8', errors='ignore')
+    return jsonify({
+        "ascii_map": game.output_b64, 
+        "plain_text": raw_text
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
