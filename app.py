@@ -63,38 +63,51 @@ def index():
             <head>
                 <title>Doom Terminal</title>
                 <style>
-                    body { background: #000; color: #0F0; display: flex; flex-direction: column; align-items: center; margin: 0; overflow: hidden; }
-                    /* Lowering font-size and line-height fixes the width/height issue */
+                    body { 
+                        background: #000; 
+                        color: #0F0; 
+                        display: flex; 
+                        flex-direction: column; 
+                        align-items: center; 
+                        margin: 0; 
+                    }
                     #display { 
                         font-family: 'Courier New', monospace; 
-                        font-size: 12px; 
-                        line-height: 12px; 
-                        letter-spacing: 1px;
+                        font-size: 14px; 
+                        line-height: 14px; 
+                        letter-spacing: 0px;
                         border: 2px solid #0F0; 
-                        padding: 5px;
+                        padding: 10px;
                         white-space: pre;
+                        display: inline-block;
+                        /* This prevents the "too wide" look by forcing a container */
+                        width: 80ch; 
+                        overflow: hidden;
                     }
                 </style>
             </head>
             <body>
-                <h2 style="margin: 5px;">Doom Terminal</h2>
-                <pre id="display">Loading Engine...</pre>
+                <h1 style="margin: 10px;">Doom Terminal</h1>
+                <pre id="display">Initializing Doom Engine...</pre>
                 <script>
                     let lastFrame = "";
                     async function update() {
                         try {
                             const res = await fetch('/map');
                             const data = await res.json();
+                            
                             if (data.plain_text && data.plain_text !== lastFrame) {
-                                // Only update if we have a significant chunk of data
-                                if (data.plain_text.length > 500) {
+                                // A full 80x25 frame is 2000 chars. 
+                                // Checking for > 1500 ensures we have almost a whole screen.
+                                if (data.plain_text.length > 2000) {
                                     document.getElementById('display').innerText = data.plain_text;
                                     lastFrame = data.plain_text;
                                 }
                             }
                         } catch (e) {}
                     }
-                    setInterval(update, 100); // Faster refresh for smoother play
+                    // Refresh slightly slower (250ms) to allow the buffer to fill
+                    setInterval(update, 250);
                     
                     window.addEventListener('keydown', e => {
                         const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','y':'y','Enter':'f'};
