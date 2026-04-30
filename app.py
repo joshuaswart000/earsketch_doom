@@ -41,22 +41,18 @@ class DoomGame:
             self.output = f"Process start failed: {str(e)}"
 
     def _stream_output(self):
-            while True:
-                try:
-                    # Read a chunk from the PTY
-                    data = os.read(self.master_fd, 10240).decode('utf-8', errors='ignore')
-                    if data:
-                        # Doom-ascii uses '\x0c' (Form Feed) to separate frames.
-                        # We split by that and take the very last complete frame.
-                        frames = data.split('\x0c')
-                        if len(frames) > 1:
-                            # The second to last item is usually the most complete frame
-                            self.output = frames[-2]
-                        else:
-                            # If no frame separator, just update with latest text
-                            self.output = data
-                except:
-                    break
+        while True:
+            try:
+                # Read absolutely everything available
+                data = os.read(self.master_fd, 10240).decode('utf-8', errors='ignore')
+                if data:
+                    # Remove the specific character that might be clearing the screen 
+                    # and just set the output to the raw text
+                    clean_data = data.replace('\x0c', '')
+                    if clean_data.strip():
+                        self.output = clean_data
+            except:
+                break
 
     def send_key(self, key):
         try:
