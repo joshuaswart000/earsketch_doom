@@ -60,22 +60,41 @@ game = DoomGame()
 def index():
     return render_template_string('''
         <html>
-            <head><title>Doom Terminal</title></head>
-            <body style="background:#000; color:#0F0; font-family:monospace; display:flex; flex-direction:column; align-items:center;">
-                <h1>Doom Terminal</h1>
-                <pre id="display" style="border:1px solid #0F0; padding:10px; min-width:640px; min-height:400px;"></pre>
+            <head>
+                <title>Doom Terminal</title>
+                <style>
+                    body { background: #000; color: #0F0; display: flex; flex-direction: column; align-items: center; margin: 0; overflow: hidden; }
+                    /* Lowering font-size and line-height fixes the width/height issue */
+                    #display { 
+                        font-family: 'Courier New', monospace; 
+                        font-size: 12px; 
+                        line-height: 12px; 
+                        letter-spacing: 1px;
+                        border: 2px solid #0F0; 
+                        padding: 5px;
+                        white-space: pre;
+                    }
+                </style>
+            </head>
+            <body>
+                <h2 style="margin: 5px;">Doom Terminal</h2>
+                <pre id="display">Loading Engine...</pre>
                 <script>
+                    let lastFrame = "";
                     async function update() {
                         try {
                             const res = await fetch('/map');
                             const data = await res.json();
-                            if (data.plain_text) {
-                                // This updates the entire block at once, preventing character-by-character jitter
-                                document.getElementById('display').innerText = data.plain_text;
+                            if (data.plain_text && data.plain_text !== lastFrame) {
+                                // Only update if we have a significant chunk of data
+                                if (data.plain_text.length > 500) {
+                                    document.getElementById('display').innerText = data.plain_text;
+                                    lastFrame = data.plain_text;
+                                }
                             }
                         } catch (e) {}
                     }
-                    setInterval(update, 200);
+                    setInterval(update, 100); // Faster refresh for smoother play
                     
                     window.addEventListener('keydown', e => {
                         const keys = {'w':'w','a':'a','s':'s','d':'d',' ':'f','y':'y','Enter':'f'};
