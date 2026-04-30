@@ -53,11 +53,15 @@ class DoomGame:
     def send_key(self, key):
         try:
             if self.process.poll() is None:
-                # Map 'f' or 'Enter' to a real carriage return
-                if key in ['f', 'Enter', '\n']:
-                    key = '\r' # Use carriage return for terminal prompts
+                # Force specific mappings for the license screen
+                if key.lower() == 'y':
+                    val = b'y\n' 
+                elif key in ['f', 'Enter', '\n']:
+                    val = b'\n'
+                else:
+                    val = key.encode()
                 
-                os.write(self.master_fd, key.encode())
+                os.write(self.master_fd, val)
         except Exception as e:
             print(f"Input Error: {e}")
 
