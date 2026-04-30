@@ -68,36 +68,35 @@ def index():
                         theme: { background: '#000000' }
                     });
                     term.open(document.getElementById('terminal-container'));
-
+                
                     let frameBuffer = "";
-                    let lastDataTime = Date.now();
-
+                    let canUpdate = true; // This is our lock
+                
                     socket.on('connect', () => {
                         statusText.innerText = "ONLINE";
                         statusText.style.color = "#0f0";
                     });
-
+                
                     socket.on('output', (msg) => {
                         frameBuffer += msg.data;
-                        lastDataTime = Date.now();
                         
-                        // If we have a full frame (roughly 2000 chars), draw it all at once
-                        if (frameBuffer.length >= 2000) {
-                            term.write('\\x1b[H' + frameBuffer.substring(0, 2000));
-                            frameBuffer = frameBuffer.substring(2000); 
+                        // Only look for a full frame if our half-second window is open
+                        if (canUpdate && frameBuffer.length >= 2000) {
+                            // Find the start of a frame (clear screen or reset code) or just take the last 2000
+                            const frame = frameBuffer.substring(frameBuffer.length - 2000);
+                            
+                            term.write('\\x1b[H' + frame); // Draw the frame
+                            
+                            frameBuffer = "";   // Clear the buffer
+                            canUpdate = false;  // Lock it so we stop looking until the timer resets
                         }
                     });
-
-                    // Fallback: Only print if data has been sitting for 200ms 
-                    // This prevents the "fragmented" look during active gameplay
+                
+                    // This opens the window every 500ms to look for a new frame
                     setInterval(() => {
-                        const timeSinceLastData = Date.now() - lastDataTime;
-                        if (frameBuffer.length > 0 && timeSinceLastData > 200) {
-                            term.write(frameBuffer);
-                            frameBuffer = "";
-                        }
-                    }, 100);
-
+                        canUpdate = true;
+                    }, 500);
+                
                     term.onData(data => { socket.emit('input', {data: data}); });
                 </script>
             </body>
