@@ -77,15 +77,21 @@ def index():
                 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
                 <style>
                     body { background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-                    #terminal { width: 640px; height: 400px; border: 2px solid #00FF00; }
-                    .controls { color: #00FF00; margin-top: 15px; font-family: monospace; }
+                    #terminal { width: 640px; height: 400px; border: 2px solid #00FF00; box-shadow: 0 0 20px #006400; }
+                    .controls { color: #00FF00; margin-top: 15px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; }
                 </style>
             </head>
             <body>
                 <div id="terminal"></div>
-                <div class="controls">WASD: Move | SPACE: Fire | Browser focused to play</div>
+                <div class="controls">WASD: Move | SPACE: Fire</div>
                 <script>
-                    const term = new Terminal({ cols: 80, rows: 25, theme: { background: '#000000', foreground: '#00FF00' }, convertEol: true });
+                    const term = new Terminal({ 
+                        cols: 80, 
+                        rows: 25, 
+                        theme: { background: '#000000', foreground: '#00FF00' },
+                        convertEol: true,
+                        cursorBlink: false
+                    });
                     term.open(document.getElementById('terminal'));
 
                     async function sendInput(key) {
@@ -99,17 +105,21 @@ def index():
                     });
 
                     async function updateScreen() {
-                        const res = await fetch('/move', { method: 'POST', body: JSON.stringify({input: ''}), headers: {'Content-Type': 'application/json'} });
-                        const data = await res.json();
-                        if (data.ascii_map) {
-                            // If the data contains the "Home" code, clear the terminal for a fresh draw
-                            if (data.ascii_map.includes('\\x1b[H') || data.ascii_map.includes('\\033[H')) {
-                                term.reset();
+                        try {
+                            const res = await fetch('/move', { method: 'POST', body: JSON.stringify({input: ''}), headers: {'Content-Type': 'application/json'} });
+                            const data = await res.json();
+                            if (data.ascii_map) {
+                                // This is the critical fix: 
+                                // Checking for the ESCAPE character \x1b or \033
+                                if (data.ascii_map.includes('\\x1b[H') || data.ascii_map.includes('\\033[H')) {
+                                    term.reset();
+                                }
+                                term.write(data.ascii_map);
                             }
-                            term.write(data.ascii_map);
-                        }
+                        } catch (e) {}
                     }
-                    setInterval(updateScreen, 100);
+                    // Speed up the refresh rate for smoother movement
+                    setInterval(updateScreen, 70);
                 </script>
             </body>
         </html>
