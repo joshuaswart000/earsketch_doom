@@ -62,7 +62,7 @@ def index():
                 <div id="terminal"></div>
                 <script>
                     const term = new Terminal({
-                        cursorBlink: false,
+                        cursorBlink: true,
                         cols: 80,
                         rows: 25,
                         theme: { background: '#000000' }
@@ -70,32 +70,27 @@ def index():
                     term.open(document.getElementById('terminal'));
                     
                     const socket = io();
-                    let frameBuffer = "";
                 
                     socket.on('output', (msg) => {
-                        frameBuffer += msg.data;
-                
-                        // If we see a "Clear Screen" sequence or hit the character limit, flush it!
-                        if (frameBuffer.includes('\x1b[2J') || frameBuffer.length >= 2000) {
-                            // Use \x1b[H to reset cursor to top-left and overwrite
-                            term.write('\x1b[H' + frameBuffer);
-                            frameBuffer = ""; 
+                        // Instead of buffering, we use \x1b[H to send the cursor to the top-left
+                        // every time new data arrives. This creates the "Full Frame" effect
+                        // without waiting for the buffer to fill.
+                        if (msg.data.length > 500) {
+                            term.write('\x1b[H' + msg.data);
+                        } else {
+                            // For small messages (like "Connected"), just print them normally
+                            term.write(msg.data);
                         }
                     });
-                
-                    // Fallback: If no data comes for 100ms, just print whatever we have
-                    setInterval(() => {
-                        if (frameBuffer.length > 0) {
-                            term.write('\x1b[H' + frameBuffer);
-                            frameBuffer = "";
-                        }
-                    }, 100);
                 
                     term.onData(data => {
                         socket.emit('input', {data: data});
                     });
                 
-                    socket.on('connect', () => term.write('\r\nConnected to Doom Engine...\r\n'));
+                    socket.on('connect', () => {
+                        term.clear();
+                        term.write('\r\nConnected! If screen is blank, tap "y" then "Enter"...\r\n');
+                    });
                 </script>
             </body>
         </html>
