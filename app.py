@@ -60,19 +60,25 @@ def index():
                 <script>
                     const socket = io({transports: ['websocket', 'polling']});
                     const term = new Terminal({
-                        cols: 80, 
-                        rows: 25,
-                        scrollback: 0, // Disable scrolling entirely
+                        cols: 80, rows: 25,
+                        scrollback: 0,
                         cursorBlink: false,
                         theme: { background: '#000000' }
                     });
                     term.open(document.getElementById('terminal-container'));
 
+                    let frameBuffer = "";
+
                     socket.on('output', (msg) => {
-                        // \x1b[H is the 'Home' command. It moves the cursor to 0,0.
-                        // By prefixing every message with this, we overwrite the screen
-                        // instead of scrolling it.
-                        term.write('\\x1b[H' + msg.data);
+                        frameBuffer += msg.data;
+
+                        // Check if the current chunk contains the "Home" (\x1b[H) or "Clear" (\x1b[2J) commands.
+                        // Doom-ascii sends these at the end or start of a full frame.
+                        if (msg.data.includes('\\x1b[H') || msg.data.includes('\\x1b[2J') || frameBuffer.length > 3000) {
+                            // We use \x1b[H to reset cursor and then dump the WHOLE collected buffer at once.
+                            term.write('\\x1b[H' + frameBuffer);
+                            frameBuffer = ""; 
+                        }
                     });
 
                     term.onData(data => {
