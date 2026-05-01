@@ -9,9 +9,9 @@ from flask_socketio import SocketIO
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-# Update these to the absolute paths where your build succeeded
-DOOM_PATH = "./doom-ascii"
-WAD_PATH = "./DOOM1.WAD"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOOM_PATH = os.path.join(BASE_DIR, "doom-ascii")
+WAD_PATH = os.path.join(BASE_DIR, "DOOM1.WAD")
 
 class DoomTerminal:
     def __init__(self):
