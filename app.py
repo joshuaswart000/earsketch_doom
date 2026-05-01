@@ -46,64 +46,44 @@ def index():
         <!DOCTYPE html>
         <html>
             <head>
-                <title>Doom Color Terminal</title>
+                <title>Doom Debug Terminal</title>
                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
                 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
                 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
                 <style>
-                    body { background: #111; margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; color: #eee; font-family: monospace; }
-                    #terminal-container { width: 800px; height: 480px; background: black; border: 5px solid #444; overflow: hidden; }
+                    body { background: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+                    #terminal-container { width: 800px; height: 480px; border: 2px solid #333; }
                 </style>
             </head>
             <body>
-                <div style="margin-bottom:10px;">Network Status: <span id="socket-status">Connecting...</span></div>
                 <div id="terminal-container"></div>
                 <script>
                     const socket = io({transports: ['websocket', 'polling']});
-                    const statusText = document.getElementById('socket-status');
                     const term = new Terminal({
-                        cols: 80, rows: 25,
+                        cols: 80, 
+                        rows: 25,
+                        scrollback: 0, // Disable scrolling entirely
                         cursorBlink: false,
-                        convertEol: true,
                         theme: { background: '#000000' }
                     });
                     term.open(document.getElementById('terminal-container'));
 
-                    let incomingBuffer = "";
-
-                    socket.on('connect', () => {
-                        statusText.innerText = "ONLINE";
-                        statusText.style.color = "#0f0";
-                    });
-
                     socket.on('output', (msg) => {
-                        incomingBuffer += msg.data;
+                        // \x1b[H is the 'Home' command. It moves the cursor to 0,0.
+                        // By prefixing every message with this, we overwrite the screen
+                        // instead of scrolling it.
+                        term.write('\\x1b[H' + msg.data);
                     });
 
-                    // This interval runs every 500ms to "Snap" the latest frame
-                    setInterval(() => {
-                        if (incomingBuffer.length >= 2000) {
-                            // 1. Grab the absolute latest 2000 characters
-                            const latestFrame = incomingBuffer.slice(-2000);
-                            
-                            // 2. Clear terminal and Reset cursor to top-left
-                            // \x1b[2J clears screen, \x1b[H resets cursor
-                            term.write('\\x1b[2J\\x1b[H' + latestFrame);
-                            
-                            // 3. Wipe the buffer so we don't double-print
-                            incomingBuffer = "";
-                        } else if (incomingBuffer.length > 0) {
-                            // If it's a small message (like "press y"), just print it
-                            term.write(incomingBuffer);
-                            incomingBuffer = "";
-                        }
-                    }, 500);
-
-                    term.onData(data => { socket.emit('input', {data: data}); });
+                    term.onData(data => {
+                        socket.emit('input', {data: data});
+                    });
                 </script>
             </body>
         </html>
     ''')
+
+
 
 @socketio.on('input')
 def handle_input(json):
