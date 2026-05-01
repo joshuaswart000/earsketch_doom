@@ -25,7 +25,7 @@ class DoomTerminal:
     def _read_output(self):
         while True:
             try:
-                data = os.read(self.master_fd, 4096)
+                data = os.read(self.master_fd, 8192)
                 if data:
                     socketio.emit('output', {'data': data.decode('utf-8', 'ignore')})
             except:
@@ -59,50 +59,48 @@ def index():
                 <div style="margin-bottom:10px;">Network Status: <span id="socket-status">Connecting...</span></div>
                 <div id="terminal-container"></div>
                 <script>
-    const socket = io({transports: ['websocket', 'polling']});
-    const statusText = document.getElementById('socket-status');
-    const term = new Terminal({
-        cols: 80, rows: 25,
-        cursorBlink: false,
-        convertEol: true,
-        theme: { background: '#000000' }
-    });
-    term.open(document.getElementById('terminal-container'));
+                    const socket = io({transports: ['websocket', 'polling']});
+                    const statusText = document.getElementById('socket-status');
+                    const term = new Terminal({
+                        cols: 80, rows: 25,
+                        cursorBlink: false,
+                        convertEol: true,
+                        theme: { background: '#000000' }
+                    });
+                    term.open(document.getElementById('terminal-container'));
 
-    let frameBuffer = "";
-    let canUpdate = true;
+                    let incomingBuffer = "";
 
-    socket.on('connect', () => {
-        statusText.innerText = "ONLINE";
-        statusText.style.color = "#0f0";
-    });
+                    socket.on('connect', () => {
+                        statusText.innerText = "ONLINE";
+                        statusText.style.color = "#0f0";
+                    });
 
-    socket.on('output', (msg) => {
-        frameBuffer += msg.data;
-        
-        // Ensure we have at least one full frame (2000 chars)
-        if (canUpdate && frameBuffer.length >= 2000) {
-            // Grab exactly the LAST 2000 characters. 
-            // This ensures we show the most recent complete state of the screen.
-            const fullFrame = frameBuffer.slice(-2000);
-            
-            // \x1b[H resets the cursor to the very top-left
-            term.write('\\x1b[H' + fullFrame); 
-            
-            // We keep a small "tail" of the buffer so we don't lose data 
-            // that is currently arriving for the next frame.
-            frameBuffer = frameBuffer.slice(-500); 
-            
-            canUpdate = false; // Lock until the next 500ms window
-        }
-    });
+                    socket.on('output', (msg) => {
+                        incomingBuffer += msg.data;
+                    });
 
-    setInterval(() => {
-        canUpdate = true;
-    }, 500);
+                    // This interval runs every 500ms to "Snap" the latest frame
+                    setInterval(() => {
+                        if (incomingBuffer.length >= 2000) {
+                            // 1. Grab the absolute latest 2000 characters
+                            const latestFrame = incomingBuffer.slice(-2000);
+                            
+                            // 2. Clear terminal and Reset cursor to top-left
+                            // \x1b[2J clears screen, \x1b[H resets cursor
+                            term.write('\\x1b[2J\\x1b[H' + latestFrame);
+                            
+                            // 3. Wipe the buffer so we don't double-print
+                            incomingBuffer = "";
+                        } else if (incomingBuffer.length > 0) {
+                            // If it's a small message (like "press y"), just print it
+                            term.write(incomingBuffer);
+                            incomingBuffer = "";
+                        }
+                    }, 500);
 
-    term.onData(data => { socket.emit('input', {data: data}); });
-</script>
+                    term.onData(data => { socket.emit('input', {data: data}); });
+                </script>
             </body>
         </html>
     ''')
