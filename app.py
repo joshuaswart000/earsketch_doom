@@ -10,7 +10,8 @@ app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DOOM_PATH = os.path.join(BASE_DIR, "doom-ascii")
+# Note the addition of 'src' and 'game' in the path
+DOOM_PATH = os.path.join(BASE_DIR, "src", "game", "doom-ascii")
 WAD_PATH = os.path.join(BASE_DIR, "DOOM1.WAD")
 
 class DoomTerminal:
