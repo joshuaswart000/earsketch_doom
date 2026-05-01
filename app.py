@@ -10,8 +10,8 @@ app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Update these to the absolute paths where your build succeeded
-DOOM_PATH = "/workspaces/earsketch_doom/src/game/doom-ascii"
-WAD_PATH = "/workspaces/earsketch_doom/DOOM1.WAD"
+DOOM_PATH = "./doom-ascii"
+WAD_PATH = "./DOOM1.WAD"
 
 class DoomTerminal:
     def __init__(self):
