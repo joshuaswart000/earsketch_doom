@@ -9,16 +9,24 @@ from flask_socketio import SocketIO
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-DOOM_PATH = "./doom-ascii"
-WAD_PATH = "./DOOM1.WAD"
+# Update these to the absolute paths where your build succeeded
+DOOM_PATH = "/workspaces/earsketch_doom/src/game/doom-ascii"
+WAD_PATH = "/workspaces/earsketch_doom/DOOM1.WAD"
 
 class DoomTerminal:
     def __init__(self):
         self.master_fd, slave_fd = pty.openpty()
         self.process = subprocess.Popen(
             [DOOM_PATH, "-iwad", WAD_PATH, "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
-            stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-            env={"TERM": "xterm-256color", "COLUMNS": "80", "LINES": "25", "PYTHONUNBUFFERED": "1"}
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            env={
+                "TERM": "xterm-256color",
+                "COLUMNS": "80",
+                "LINES": "25",
+                "PYTHONUNBUFFERED": "1"
+            }
         )
         threading.Thread(target=self._read_output, daemon=True).start()
 
@@ -33,6 +41,7 @@ class DoomTerminal:
 
     def write(self, data):
         try:
+            # Handle enter keys and raw input
             val = b"\r" if data == "\n" else data.encode()
             os.write(self.master_fd, val)
         except:
@@ -43,53 +52,54 @@ doom = DoomTerminal()
 @app.route('/')
 def index():
     return render_template_string('''
-        <!DOCTYPE html>
-        <html>
-            <head>
-                <title>Doom Debug Terminal</title>
-                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
-                <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
-                <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-                <style>
-                    body { background: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-                    #terminal-container { width: 800px; height: 480px; border: 2px solid #333; }
-                </style>
-            </head>
-            <body>
-                <div id="terminal-container"></div>
-                <script>
-                    const socket = io({transports: ['websocket', 'polling']});
-                    const term = new Terminal({
-                        cols: 80, rows: 25,
-                        scrollback: 0,
-                        cursorBlink: false,
-                        theme: { background: '#000000' }
-                    });
-                    term.open(document.getElementById('terminal-container'));
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Doom ASCII Live</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { background: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        #terminal-container { width: 800px; height: 480px; border: 2px solid #333; box-shadow: 0 0 20px rgba(0,255,0,0.1); }
+    </script>
+</head>
+<body>
+    <div id="terminal-container"></div>
+    <script>
+        const socket = io({transports: ['websocket', 'polling']});
+        const term = new Terminal({
+            cols: 80,
+            rows: 25,
+            scrollback: 0,
+            cursorBlink: false,
+            theme: { background: '#000000' }
+        });
+        term.open(document.getElementById('terminal-container'));
 
-                    let frameBuffer = "";
+        let frameBuffer = "";
 
-                    socket.on('output', (msg) => {
-                        frameBuffer += msg.data;
+        socket.on('output', (msg) => {
+            frameBuffer += msg.data;
 
-                        // Check if the current chunk contains the "Home" (\x1b[H) or "Clear" (\x1b[2J) commands.
-                        // Doom-ascii sends these at the end or start of a full frame.
-                        if (msg.data.includes('\\x1b[H') || msg.data.includes('\\x1b[2J') || frameBuffer.length > 3000) {
-                            // We use \x1b[H to reset cursor and then dump the WHOLE collected buffer at once.
-                            term.write('\\x1b[H' + frameBuffer);
-                            frameBuffer = ""; 
-                        }
-                    });
+            // A full Doom frame (80x25) is 2000 characters. 
+            // We wait until we have a full "page" of data to avoid the 'Matrix' shredding effect.
+            if (frameBuffer.length >= 2000) {
+                // \x1b[H resets the cursor to the top-left (Home).
+                // We write the last 2000 characters to show the most recent frame.
+                term.write('\\x1b[H' + frameBuffer.slice(-2000));
+                frameBuffer = ""; 
+            }
+        });
 
-                    term.onData(data => {
-                        socket.emit('input', {data: data});
-                    });
-                </script>
-            </body>
-        </html>
-    ''')
-
-
+        // Forward keyboard input to the game
+        term.onData(data => {
+            socket.emit('input', {data: data});
+        });
+    </script>
+</body>
+</html>
+''')
 
 @socketio.on('input')
 def handle_input(json):
