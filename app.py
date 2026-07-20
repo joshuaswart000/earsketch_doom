@@ -1,3 +1,7 @@
+import eventlet
+eventlet.monkey_patch()
+
+# All your other imports go AFTER the monkey patch
 import subprocess
 import os
 import pty
@@ -5,6 +9,7 @@ import threading
 import time
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO
+# ... (rest of your code stays the same)
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
