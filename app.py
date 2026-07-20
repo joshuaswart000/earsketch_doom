@@ -14,19 +14,28 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOOM_PATH = os.path.join(BASE_DIR, "src/game/doom-ascii")
 WAD_PATH = os.path.join(BASE_DIR, "DOOM1.WAD")
 
+import struct
+import fcntl
+import termios
+
 class DoomTerminal:
     def __init__(self):
         self.master_fd, slave_fd = pty.openpty()
+        
+        # Explicitly force the pseudo-terminal size at the OS level (80x25)
+        # Some Linux environments reject PTY data if the window size defaults to 0x0
+        size = struct.pack('HHHH', 25, 80, 0, 0)
+        fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, size)
+        
         self.process = subprocess.Popen(
             [DOOM_PATH, "-iwad", WAD_PATH, "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
             env={
-                "TERM": "xterm-256color",
+                "TERM": "xterm",
                 "COLUMNS": "80",
-                "LINES": "25",
-                "PYTHONUNBUFFERED": "1"
+                "LINES": "25"
             }
         )
         threading.Thread(target=self._read_output, daemon=True).start()
