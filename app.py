@@ -3,28 +3,27 @@ import os
 import pty
 import threading
 import time
+import struct
+import fcntl
+import termios
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO
-# ... (rest of your code stays the same)
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Note the addition of 'src' and 'game' in the path
 DOOM_PATH = os.path.join(BASE_DIR, "src/game/doom-ascii")
 WAD_PATH = os.path.join(BASE_DIR, "DOOM1.WAD")
 
-import struct
-import fcntl
-import termios
+# Global placeholder for our game instance
+doom = None
 
 class DoomTerminal:
     def __init__(self):
         self.master_fd, slave_fd = pty.openpty()
         
         # Explicitly force the pseudo-terminal size at the OS level (80x25)
-        # Some Linux environments reject PTY data if the window size defaults to 0x0
         size = struct.pack('HHHH', 25, 80, 0, 0)
         fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, size)
         
@@ -47,18 +46,15 @@ class DoomTerminal:
                 data = os.read(self.master_fd, 8192)
                 if data:
                     socketio.emit('output', {'data': data.decode('utf-8', 'ignore')})
-            except:
+            except Exception:
                 break
 
     def write(self, data):
         try:
-            # Handle enter keys and raw input
             val = b"\r" if data == "\n" else data.encode()
             os.write(self.master_fd, val)
-        except:
+        except Exception:
             pass
-
-doom = DoomTerminal()
 
 @app.route('/')
 def index():
@@ -73,7 +69,7 @@ def index():
     <style>
         body { background: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
         #terminal-container { width: 800px; height: 480px; border: 2px solid #333; box-shadow: 0 0 20px rgba(0,255,0,0.1); }
-    </script>
+    </style>
 </head>
 <body>
     <div id="terminal-container"></div>
@@ -94,10 +90,7 @@ def index():
             frameBuffer += msg.data;
 
             // A full Doom frame (80x25) is 2000 characters. 
-            // We wait until we have a full "page" of data to avoid the 'Matrix' shredding effect.
             if (frameBuffer.length >= 2000) {
-                // \x1b[H resets the cursor to the top-left (Home).
-                // We write the last 2000 characters to show the most recent frame.
                 term.write('\\x1b[H' + frameBuffer.slice(-2000));
                 frameBuffer = ""; 
             }
@@ -112,9 +105,21 @@ def index():
 </html>
 ''')
 
+@socketio.on('connect')
+def handle_connect():
+    global doom
+    if doom is None:
+        print("First client connected! Instantiating Doom process...", flush=True)
+        try:
+            doom = DoomTerminal()
+        except Exception as e:
+            print(f"Failed to start Doom binary: {e}", flush=True)
+
 @socketio.on('input')
 def handle_input(json):
-    doom.write(json.get('data', ''))
+    global doom
+    if doom:
+        doom.write(json.get('data', ''))
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
