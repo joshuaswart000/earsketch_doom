@@ -1,6 +1,3 @@
-from gevent import monkey
-monkey.patch_all()
-
 import subprocess
 import os
 import pty
@@ -11,7 +8,7 @@ from flask_socketio import SocketIO
 # ... (rest of your code stays the same)
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Note the addition of 'src' and 'game' in the path
