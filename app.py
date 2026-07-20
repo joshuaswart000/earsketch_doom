@@ -116,4 +116,13 @@ def handle_input(json):
     doom.write(json.get('data', ''))
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=10000, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get("PORT", 10000))
+    # Explicitly use eventlet/gevent style threading under the hood 
+    # and turn off logging overrides that freeze the WebSocket handshake
+    socketio.run(
+        app, 
+        host='0.0.0.0', 
+        port=port, 
+        allow_unsafe_werkzeug=True,
+        log_output=True
+    )
