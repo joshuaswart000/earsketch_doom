@@ -3,3 +3,4 @@ flask-cors
 gunicorn
 requests
 flask-socketio
+eventlet==0.35.2
