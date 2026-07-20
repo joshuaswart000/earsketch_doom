@@ -1,7 +1,6 @@
-import eventlet
-eventlet.monkey_patch()
+from gevent import monkey
+monkey.patch_all()
 
-# All your other imports go AFTER the monkey patch
 import subprocess
 import os
 import pty
