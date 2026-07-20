@@ -1,7 +1,5 @@
+requests
 flask
 flask-cors
-gunicorn
-requests
 flask-socketio
-gevent==24.2.1
-gevent-websocket==0.10.1
+eventlet==0.35.2
