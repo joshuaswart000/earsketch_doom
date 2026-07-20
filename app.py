@@ -120,14 +120,5 @@ def handle_input(json):
     doom.write(json.get('data', ''))
 
 if __name__ == '__main__':
-    # Force the port to exactly what Render expects
     port = int(os.environ.get("PORT", 10000))
-    
-    # Eventlet needs explicitly defined production parameters on cloud platforms
-    socketio.run(
-        app, 
-        host='0.0.0.0', 
-        port=port, 
-        allow_unsafe_werkzeug=True,
-        log_output=True
-    )
+    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
