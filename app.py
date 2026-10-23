@@ -28,7 +28,7 @@ class DoomTerminal:
         fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, size)
         
         self.process = subprocess.Popen(
-            [DOOM_PATH, "-iwad", WAD_PATH, "-i", "-nosound", "-nodraw", "-warp", "1", "1", "-directinput"],
+            [DOOM_PATH, "-iwad", WAD_PATH, "-i", "-nodraw", "-warp", "1", "1", "-directinput"], #  "-nosound",
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
