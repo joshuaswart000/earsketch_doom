@@ -89,7 +89,7 @@ def index():
         term.open(document.getElementById('terminal-container'));
 
         socket.on('output', (msg) => {
-            term.write(msg.data);
+            term.write('\x1b[H' + msg.data);
         });
 
         // Forward keyboard input to the game
