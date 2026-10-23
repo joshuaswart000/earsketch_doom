@@ -27,8 +27,15 @@ class DoomTerminal:
         size = struct.pack('HHHH', 25, 80, 0, 0)
         fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, size)
         
+        # Make the master file descriptor non-blocking so reads don't hang
+        flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
+        fcntl.fcntl(self.master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        
+        print(f"Spawning binary from: {DOOM_PATH}", flush=True)
+        print(f"Using WAD from: {WAD_PATH}", flush=True)
+
         self.process = subprocess.Popen(
-            [DOOM_PATH, "-iwad", WAD_PATH, "-i", "-nodraw", "-warp", "1", "1", "-directinput"], #  "-nosound",
+            [DOOM_PATH, "-iwad", WAD_PATH, "-i", "-nosound", "-warp", "1", "1", "-directinput"],
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
@@ -41,16 +48,19 @@ class DoomTerminal:
         threading.Thread(target=self._read_output, daemon=True).start()
 
     def _read_output(self):
-        buffer = b""
         while True:
             try:
-                chunk = os.read(self.master_fd, 8192)
-                if chunk:
-                    buffer += chunk
-                    while b"---FRAME_END---" in buffer:
-                        frame, buffer = buffer.split(b"---FRAME_END---", 1)
-                        socketio.emit('output', {'data': frame.decode('utf-8', 'ignore')})
-            except Exception:
+                # Use os.read safely with non-blocking PTY
+                data = os.read(self.master_fd, 8192)
+                if data:
+                    text_data = data.decode('utf-8', 'ignore')
+                    print(f"Doom Output Chunk: {text_data[:50]}...", flush=True) # Diagnostic log
+                    socketio.emit('output', {'data': text_data})
+            except OSError:
+                # No data ready right now, sleep briefly to prevent CPU spinning
+                time.sleep(0.01)
+            except Exception as e:
+                print(f"Error reading PTY output: {e}", flush=True)
                 break
 
     def write(self, data):
@@ -59,6 +69,8 @@ class DoomTerminal:
             os.write(self.master_fd, val)
         except Exception:
             pass
+
+
 
 @app.route('/')
 def index():
