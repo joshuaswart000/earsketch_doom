@@ -48,21 +48,22 @@ class DoomTerminal:
         threading.Thread(target=self._read_output, daemon=True).start()
 
     def _read_output(self):
+        buffer = b""
         while True:
             try:
-                # Use os.read safely with non-blocking PTY
-                data = os.read(self.master_fd, 8192)
-                if data:
-                    text_data = data.decode('utf-8', 'ignore')
-                    print(f"Doom Output Chunk: {text_data[:50]}...", flush=True) # Diagnostic log
-                    socketio.emit('output', {'data': text_data})
+                chunk = os.read(self.master_fd, 8192)
+                if chunk:
+                    buffer += chunk
+                    while b"---FRAME_END---" in buffer:
+                        frame, buffer = buffer.split(b"---FRAME_END---", 1)
+                        socketio.emit('output', {'data': frame.decode('utf-8', 'ignore')})
             except OSError:
-                # No data ready right now, sleep briefly to prevent CPU spinning
                 time.sleep(0.01)
             except Exception as e:
                 print(f"Error reading PTY output: {e}", flush=True)
                 break
 
+    
     def write(self, data):
         try:
             val = b"\r" if data == "\n" else data.encode()
@@ -101,6 +102,7 @@ def index():
         term.open(document.getElementById('terminal-container'));
 
         socket.on('output', (msg) => {
+            // \x1b[H resets the cursor, and msg.data is a complete, pristine frame
             term.write('\x1b[H' + msg.data);
         });
 
