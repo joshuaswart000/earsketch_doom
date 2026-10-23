@@ -232,6 +232,9 @@ void I_FinishUpdate (void)
     }
 
 	DG_DrawFrame();
+    // Send a distinct custom marker to stdout signaling frame completion
+    printf("\n---FRAME_END---\n");
+    fflush(stdout);
 }
 
 //
