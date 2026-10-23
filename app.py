@@ -41,17 +41,17 @@ class DoomTerminal:
         threading.Thread(target=self._read_output, daemon=True).start()
 
     def _read_output(self):
-    buffer = b""
-    while True:
-        try:
-            chunk = os.read(self.master_fd, 8192)
-            if chunk:
-                buffer += chunk
-                while b"---FRAME_END---" in buffer:
-                    frame, buffer = buffer.split(b"---FRAME_END---", 1)
-                    socketio.emit('output', {'data': frame.decode('utf-8', 'ignore')})
-        except Exception:
-            break
+        buffer = b""
+        while True:
+            try:
+                chunk = os.read(self.master_fd, 8192)
+                if chunk:
+                    buffer += chunk
+                    while b"---FRAME_END---" in buffer:
+                        frame, buffer = buffer.split(b"---FRAME_END---", 1)
+                        socketio.emit('output', {'data': frame.decode('utf-8', 'ignore')})
+            except Exception:
+                break
 
     def write(self, data):
         try:
@@ -88,16 +88,8 @@ def index():
         });
         term.open(document.getElementById('terminal-container'));
 
-        let frameBuffer = "";
-
         socket.on('output', (msg) => {
-            frameBuffer += msg.data;
-
-            // A full Doom frame (80x25) is 2000 characters. 
-            if (frameBuffer.length >= 2000) {
-                term.write('\\x1b[H' + frameBuffer.slice(-2000));
-                frameBuffer = ""; 
-            }
+            term.write(msg.data);
         });
 
         // Forward keyboard input to the game
