@@ -41,13 +41,17 @@ class DoomTerminal:
         threading.Thread(target=self._read_output, daemon=True).start()
 
     def _read_output(self):
-        while True:
-            try:
-                data = os.read(self.master_fd, 8192)
-                if data:
-                    socketio.emit('output', {'data': data.decode('utf-8', 'ignore')})
-            except Exception:
-                break
+    buffer = b""
+    while True:
+        try:
+            chunk = os.read(self.master_fd, 8192)
+            if chunk:
+                buffer += chunk
+                while b"---FRAME_END---" in buffer:
+                    frame, buffer = buffer.split(b"---FRAME_END---", 1)
+                    socketio.emit('output', {'data': frame.decode('utf-8', 'ignore')})
+        except Exception:
+            break
 
     def write(self, data):
         try:
